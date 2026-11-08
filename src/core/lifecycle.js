@@ -6,41 +6,67 @@
 export function createLifecycle(win, features, logError) {
   /** @type {string | null} */
   let routeKey = null
-  /** @type {(() => void)[]} */
-  let cleanups = []
+  /** @type {Map<string, () => void>} */
+  const cleanups = new Map()
+  const failed = new Set()
 
-  function clear() {
-    routeKey = null
-    const previous = cleanups
-    cleanups = []
-    for (const cleanup of previous.reverse()) {
-      try {
-        cleanup()
-      } catch {
-        logError('feature-cleanup')
-      }
+  /** @param {string} id */
+  function unmount(id) {
+    const cleanup = cleanups.get(id)
+    cleanups.delete(id)
+    failed.delete(id)
+    try {
+      cleanup?.()
+    } catch {
+      logError('feature-cleanup')
     }
   }
 
-  /** @param {import('./types.js').Route | null} route */
-  function update(route) {
-    const nextKey = route?.key ?? null
-    if (nextKey === routeKey) return
-    clear()
-    if (!route) return
-    routeKey = nextKey
+  function clear() {
+    routeKey = null
+    for (const id of [...cleanups.keys()].reverse()) unmount(id)
+    failed.clear()
+  }
 
+  /**
+   * @param {import('./types.js').Route} route
+   * @param {import('./types.js').Preferences} preferences
+   * @param {(id: string) => { host: HTMLElement; detail: HTMLElement }} getView
+   */
+  function update(route, preferences, getView) {
+    if (route.key !== routeKey) {
+      clear()
+      routeKey = route.key
+    }
+
+    /** @type {Map<string, import('./types.js').FeatureState>} */
+    const states = new Map()
     for (const feature of features) {
-      if (feature.route !== route.kind) continue
+      const { id, mount } = feature
+      const availability = feature.capabilities(route)
+      const enabled = preferences[id] === true
+      if (availability !== 'supported' || !enabled) unmount(id)
+      else if (mount && !cleanups.has(id) && !failed.has(id)) mountFeature(id, mount)
+      states.set(id, { availability, enabled, failed: failed.has(id) })
+    }
+    return states
+
+    /**
+     * @param {string} id
+     * @param {NonNullable<import('./types.js').Feature['mount']>} mount
+     */
+    function mountFeature(id, mount) {
       const scope = new win.AbortController()
       try {
-        const cleanup = feature.mount({ document: win.document, route, signal: scope.signal })
-        cleanups.push(() => {
+        const view = getView(id)
+        const lifetime = mount({ document: win.document, route, signal: scope.signal, view })
+        cleanups.set(id, () => {
           scope.abort()
-          cleanup?.()
+          lifetime?.dispose()
         })
       } catch {
         scope.abort()
+        failed.add(id)
         logError('feature-mount')
       }
     }

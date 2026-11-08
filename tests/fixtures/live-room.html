@@ -1,6 +1,17 @@
 <!doctype html>
 <html lang="zh-CN">
+  <meta charset="utf-8">
   <title>DouyinEx live room fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; background: #11151c; color: #e9edf6; font: 15px system-ui, sans-serif; }
+    header { margin-bottom: 16px; font-weight: 600; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 16px; }
+    video { width: 100%; aspect-ratio: 16 / 9; background: #1b2432; border-radius: 10px; }
+    aside { padding: 16px; background: #1b2432; border-radius: 10px; }
+    @media (max-width: 680px) { main { grid-template-columns: 1fr; } }
+  </style>
+  <header>模拟直播间</header>
   <main>
     <video controls muted></video>
     <aside aria-label="模拟直播聊天">模拟消息</aside>
