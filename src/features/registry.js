@@ -1,4 +1,6 @@
 import { mountHighestQuality } from './highest-quality.js'
+import { mountMultiview } from './multiview.js'
+import { mountPictureInPicture } from './picture-in-picture.js'
 import { mountPlayerControls } from './player-controls.js'
 import { mountPauseGuard, mountVolumeWheel } from './player-gestures.js'
 import { roomCleanup } from './room-cleanup.js'
@@ -30,6 +32,14 @@ export const features = [
     defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuFilters,
   },
   ...roomCleanup,
+  {
+    id: 'picture-in-picture', label: '画中画', section: 'multimedia',
+    defaultEnabled: false, capabilities: roomOnly, mount: mountPictureInPicture,
+  },
+  {
+    id: 'multiview', label: '双房间视图', section: 'multimedia',
+    defaultEnabled: false, capabilities: () => 'supported', mount: mountMultiview,
+  },
   {
     id: 'capture', label: '截图与录制', section: 'multimedia',
     defaultEnabled: false, capabilities: () => 'unsupported',

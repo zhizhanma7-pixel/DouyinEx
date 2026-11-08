@@ -110,6 +110,19 @@ export const panelStyles = `
   .player-actions { align-items: center; }
   .player-actions select { max-inline-size: 100%; padding: 4px; border-radius: 6px; }
   .player-actions button[aria-pressed="true"] { border-color: #83f5dc; }
+  .multiview {
+    position: fixed; inset: 18px; z-index: 1; overflow: auto; overscroll-behavior: contain;
+    padding: 16px; border: 1px solid #394452; border-radius: 16px; background: #161c27;
+    box-shadow: 0 12px 40px #000b;
+  }
+  .multiview-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .multiview-header h2 { margin: 0 8px 0 0; font-size: 18px; }
+  .multiview input, .multiview button { padding: 5px 9px; border: 1px solid #475568; border-radius: 7px; }
+  .multiview a { color: #a7f3dc; }
+  .multiview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .multiview-tile { min-inline-size: 0; padding: 10px; border: 1px solid #394452; border-radius: 10px; }
+  .multiview iframe { display: block; inline-size: 100%; block-size: min(62vh, 620px); border: 0; }
+  @media (max-width: 850px) { .multiview-grid { grid-template-columns: 1fr; } }
   .feedback { margin: 0; color: #ffe1a0; font-size: 12px; }
   .feedback:not(:empty) { margin-block-start: 8px; }
   :host([data-compact]) .panel { inline-size: min(300px, calc(100vw - 36px)); padding: 10px; }
