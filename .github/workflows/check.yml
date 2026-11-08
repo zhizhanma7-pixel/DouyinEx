@@ -19,8 +19,12 @@ jobs:
         with:
           runtime: node@24.19.0
       - run: pnpm check
+      - run: pnpm audit --audit-level high
+      - run: pnpm verify-build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: DouyinEx-userscript
-          path: dist/douyinex.user.js
+          path: |
+            dist/douyinex.user.js
+            dist/douyinex.user.js.sha256
           if-no-files-found: error
