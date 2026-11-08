@@ -1,0 +1,6 @@
+allowBuilds:
+  esbuild: true
+
+overrides:
+  # ESLint's current range still resolves to a version affected by GHSA-g3hv-75wg-m249.
+  minimatch@10.2.6: 11.0.1
