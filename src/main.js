@@ -10,4 +10,5 @@ if (!Reflect.get(window, runtimeKey)) {
     unregisterMenuCommand: GM_unregisterMenuCommand,
   }, features)
   Reflect.set(window, runtimeKey, true)
+  console.info('[DouyinEx] 已初始化')
 }

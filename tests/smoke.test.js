@@ -178,6 +178,7 @@ test('storage failures start in safe mode and keep the previous state if a write
 
 test('the production userscript has narrow metadata and runs once in a fixture', async (t) => {
   const win = openRoom(t)
+  const info = t.mock.method(win.console, 'info', () => {})
   const values = new Map()
   const { api, commands } = fakeScriptApi(values)
   Object.assign(win, {
@@ -200,6 +201,9 @@ test('the production userscript has narrow metadata and runs once in a fixture',
   assert.doesNotMatch(script.text, /^\/\/ @(?:connect|require|resource)\b|sourceMappingURL=/m)
   win.eval(script.text)
   win.eval(script.text)
+  assert.deepEqual(info.mock.calls.map(({ arguments: args }) => Array.from(args)), [
+    ['[DouyinEx] 已初始化'],
+  ])
   assert.equal(commands.size, 1)
   assert.equal(commands.keys().next().value, 1)
   const [command] = commands.values()

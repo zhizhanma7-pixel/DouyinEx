@@ -28,7 +28,7 @@ export async function buildUserscript({ dev = false, write = true } = {}) {
   return build({
     absWorkingDir: fileURLToPath(root),
     entryPoints: ['src/main.js'],
-    outfile: dev ? 'dist/DouyinEx.dev.user.js' : 'dist/DouyinEx.user.js',
+    outfile: dev ? 'dist/douyinex.dev.user.js' : 'dist/douyinex.user.js',
     bundle: true,
     format: 'iife',
     platform: 'browser',

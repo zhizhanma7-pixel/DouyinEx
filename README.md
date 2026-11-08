@@ -4,6 +4,12 @@
 
 CP-01 提供脚本构建、页面生命周期和安全模式。进入直播入口或在数字房间之间切换时，脚本会为对应页面管理增强功能的启动与清理。当前功能注册表为空，原生页面与播放器保持原样。
 
+## 开发工作流
+
+- [CHECKPOINTS.md](CHECKPOINTS.md) 记录 CP-00 至 CP-09 的实施顺序、依赖和验收条件。
+- **CP-05.1 弹幕 +1**计划支持手动选取弹幕并发送，以及草稿回退。
+- **CP-05.2 弹幕前缀和后缀**计划支持小尾巴，兼容 Enter、发送按钮和 +1。
+
 ## 构建和试装
 
 使用 Node.js 24 和 pnpm 11.25.0。
@@ -14,8 +20,8 @@ pnpm check
 pnpm build:dev
 ```
 
-- `pnpm check` 依次执行 lint、类型检查、模拟页面测试和正式构建。产物是 `dist/DouyinEx.user.js`，也可从通过检查的 GitHub Actions 运行下载。
-- `pnpm build:dev` 生成带内联源码映射的 `dist/DouyinEx.dev.user.js`。
+- `pnpm check` 依次执行 lint、类型检查、模拟页面测试和正式构建。产物是 `dist/douyinex.user.js`，也可从通过检查的 GitHub Actions 运行下载。
+- `pnpm build:dev` 生成带内联源码映射的 `dist/douyinex.dev.user.js`。
 - 在 Tampermonkey 中新建脚本，将正式产物的全部内容粘贴进去并保存，然后刷新抖音直播网页。在 Tampermonkey 菜单中可以开启或关闭 DouyinEx 安全模式。切换立即作用于当前标签页，刷新后保留。
 
 ## 验证状态
