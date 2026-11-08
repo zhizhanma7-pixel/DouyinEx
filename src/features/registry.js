@@ -1,6 +1,8 @@
 import { mountDanmakuExport } from './danmaku-export.js'
 import { mountDanmakuFilters } from './danmaku-filters.js'
+import { mountDanmakuPlusOne } from './danmaku-plus-one.js'
 import { mountDanmakuStats } from './danmaku-stats.js'
+import { mountDanmakuTail } from './danmaku-tail.js'
 import { mountHighestQuality } from './highest-quality.js'
 import { mountMediaCapture } from './media-capture.js'
 import { mountMultiview } from './multiview.js'
@@ -38,6 +40,14 @@ export const features = [
   {
     id: 'danmaku-stats', label: '弹幕统计', section: 'danmaku',
     defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuStats,
+  },
+  {
+    id: 'danmaku-plus-one', label: '弹幕 +1', section: 'danmaku',
+    defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuPlusOne,
+  },
+  {
+    id: 'danmaku-tail', label: '弹幕小尾巴', section: 'danmaku',
+    defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuTail,
   },
   ...roomCleanup,
   {

@@ -1,6 +1,8 @@
 const SAFE_MODE_KEY = 'safeMode'
 const PREFERENCES_KEY = 'featurePreferences'
+const ROOM_INDEX_KEY = `${PREFERENCES_KEY}:rooms`
 export const MAX_PREFERENCES_LENGTH = 8192
+export const MAX_STORED_ROOMS = 50
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 function isRecord(value) {
@@ -40,6 +42,38 @@ export function createSettings(api, logError, features) {
     return preferences
   }
 
+  /** @param {import('./types.js').Preferences} preferences */
+  function isRoomDefault(preferences) {
+    return Object.entries(roomDefaults).every(([id, enabled]) => preferences[id] === enabled)
+  }
+
+  /** Room keys, most recently used first. @returns {string[]} */
+  function readRoomIndex() {
+    try {
+      const value = api.getValue(ROOM_INDEX_KEY, null)
+      if (!Array.isArray(value)) return []
+      return [...new Set(value.filter((key) => typeof key === 'string' && /^\/\d{1,20}$/.test(key)))]
+    } catch {
+      return []
+    }
+  }
+
+  /** Move a room to the front and drop the least recently used beyond the cap. @param {string} roomKey */
+  function rememberRoom(roomKey) {
+    const index = readRoomIndex()
+    if (index[0] === roomKey && index.length <= MAX_STORED_ROOMS) return
+    const next = [roomKey, ...index.filter((key) => key !== roomKey)]
+    for (const stale of next.splice(MAX_STORED_ROOMS)) api.deleteValue(storageKey(stale))
+    api.setValue(ROOM_INDEX_KEY, next)
+  }
+
+  /** @param {string} roomKey */
+  function forgetRoom(roomKey) {
+    api.deleteValue(storageKey(roomKey))
+    const index = readRoomIndex()
+    if (index.includes(roomKey)) api.setValue(ROOM_INDEX_KEY, index.filter((key) => key !== roomKey))
+  }
+
   return {
     defaults,
     roomDefaults,
@@ -74,7 +108,15 @@ export function createSettings(api, logError, features) {
     readPreferences(roomKey = null, fallback) {
       const known = roomKey ? roomDefaults : defaults
       try {
-        return decode(api.getValue(storageKey(roomKey), null), known) ?? known
+        const stored = decode(api.getValue(storageKey(roomKey), null), known)
+        if (stored && roomKey) {
+          try {
+            rememberRoom(roomKey)
+          } catch {
+            // Recency is best effort; the preferences themselves were read.
+          }
+        }
+        return stored ?? known
       } catch {
         logError('settings-read')
         return fallback ?? known
@@ -86,7 +128,30 @@ export function createSettings(api, logError, features) {
      */
     writePreferences(preferences, roomKey = null) {
       try {
+        if (roomKey && isRoomDefault(preferences)) {
+          // A room back at defaults needs no storage.
+          forgetRoom(roomKey)
+          return true
+        }
         api.setValue(storageKey(roomKey), { version: 1, features: preferences })
+      } catch {
+        logError('settings-write')
+        return false
+      }
+      if (roomKey) {
+        try {
+          rememberRoom(roomKey)
+        } catch {
+          logError('settings-write')
+        }
+      }
+      return true
+    },
+    /** Remove every stored room preference. */
+    clearRoomPreferences() {
+      try {
+        for (const key of readRoomIndex()) api.deleteValue(storageKey(key))
+        api.deleteValue(ROOM_INDEX_KEY)
         return true
       } catch {
         logError('settings-write')
