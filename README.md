@@ -17,10 +17,12 @@ DouyinEx 在直播首页和数字房间提供悬浮设置入口。可增强原�
 ```sh
 pnpm install --frozen-lockfile
 pnpm check
+pnpm verify-build
 pnpm build:dev
 ```
 
 - `pnpm check` 依次执行 lint、类型检查、模拟页面测试和正式构建。产物是 `dist/douyinex.user.js`，也可从通过检查的 GitHub Actions 运行下载。
+- `pnpm verify-build` 比较当前产物与源码重建结果，并生成 SHA-256 校验文件。CI 会同时检查高危依赖问题并上传两份文件。
 - `pnpm build:dev` 生成带内联源码映射的 `dist/douyinex.dev.user.js`。
 - 在 Tampermonkey 中新建脚本，将正式产物的全部内容粘贴进去并保存，然后刷新抖音直播网页。在 Tampermonkey 菜单中可以开启或关闭 DouyinEx 安全模式。切换立即作用于当前标签页，刷新后保留。
 
@@ -40,7 +42,7 @@ pnpm build:dev
 
 ## 验证状态
 
-近期测试见 [CP-05 弹幕](docs/CP-05-danmaku.md)、[CP-06 画中画与多房间](docs/CP-06-multiview.md) 和 [CP-07 多媒体](docs/CP-07-media.md)。真实 Tampermonkey 安装、登录态复验和 CP-00 的持续播放验证仍待执行。前序记录见 [CP-01](docs/CP-01-scaffold.md)、[CP-02](docs/CP-02-settings.md)、[CP-03](docs/CP-03-room-cleanup.md) 和 [CP-04](docs/CP-04-player.md)。
+当前构建用于试装。Chrome 和 Edge 的已测版本、范围和发布前待验项目见 [CP-09 发布检查](docs/CP-09-release-check.md)。界面示例见 [设置面板截图](docs/evidence/cp-02-desktop.png)。抖音页面改版可能导致功能失效，遇到冲突时可启用安全模式。
 
 ## 许可证
 

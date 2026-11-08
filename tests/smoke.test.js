@@ -223,7 +223,7 @@ test('the production userscript has narrow metadata and runs once in a fixture',
     'GM_registerMenuCommand', 'GM_unregisterMenuCommand',
   ])
   assert.match(script.text, /^\/\/ @noframes$/m)
-  assert.doesNotMatch(script.text, /^\/\/ @(?:connect|require|resource)\b|sourceMappingURL=/m)
+  assert.doesNotMatch(script.text, /^\/\/ @(?:connect|require|resource|include|updateURL|downloadURL)\b|sourceMappingURL=/m)
   win.eval(script.text)
   win.eval(script.text)
   assert.deepEqual(info.mock.calls.map(({ arguments: args }) => Array.from(args)), [
