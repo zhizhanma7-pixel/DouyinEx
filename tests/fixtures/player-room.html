@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8">
+  <title>DouyinEx player fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 22px; color: #ebedf6; background: #141823; font: 15px system-ui, sans-serif; }
+    header { margin-bottom: 15px; font-size: 18px; font-weight: 650; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 16px; min-height: 100vh; }
+    .douyin-player { position: relative; background: #252c3e; border-radius: 12px; overflow: hidden; }
+    .douyin-player video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #232e45; }
+    .douyin-player-controls { display: flex; align-items: center; gap: 12px; padding: 12px; }
+    [data-e2e="quality-selector"] { display: none; }
+    aside { padding: 16px; border-radius: 12px; background: #20273a; }
+  </style>
+  <header>模拟直播间 · 原生画质菜单</header>
+  <main data-e2e="living-container">
+    <section id="PlayerLayout">
+      <div class="douyin-player">
+        <video muted></video>
+        <div class="douyin-player-controls">
+          <button type="button">原生播放</button>
+          <div>
+            <div data-e2e="quality">标清</div>
+            <div data-e2e="quality-selector">
+              <div><span>原画</span><span aria-hidden="true">登录即享</span></div>
+              <div aria-disabled="true"><span>蓝光</span></div>
+              <div><span>超清</span><span style="visibility:hidden">登录即享</span></div>
+              <div><span>高清</span></div>
+              <div><span>标清</span></div>
+              <div><span>2K</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <aside id="chatroom">模拟聊天与滚动区域</aside>
+  </main>

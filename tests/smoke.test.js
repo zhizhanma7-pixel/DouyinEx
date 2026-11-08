@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
+import { setTimeout as delay } from 'node:timers/promises'
 import { JSDOM } from 'jsdom'
 import { buildUserscript } from '../scripts/build.js'
 import { startApp } from '../src/core/app.js'
@@ -9,6 +10,7 @@ import { features } from '../src/features/registry.js'
 
 const fixture = await readFile(new URL('./fixtures/live-room.html', import.meta.url), 'utf8')
 const cleanupFixture = await readFile(new URL('./fixtures/room-cleanup.html', import.meta.url), 'utf8')
+const playerFixture = await readFile(new URL('./fixtures/player-room.html', import.meta.url), 'utf8')
 const roomUrl = 'https://live.douyin.com/1001'
 
 function openRoom(t, html = fixture) {
@@ -53,6 +55,17 @@ function panelRoot(win) {
 function control(root, label) {
   return [...root.querySelectorAll('.row label')].find((row) => row.textContent === label)
     .querySelector('input')
+}
+
+function mockMedia(video) {
+  video.style.visibility = 'visible'
+  video.getBoundingClientRect = () => ({ left: 0, top: 0, right: 640, bottom: 360, width: 640, height: 360 })
+  Object.defineProperties(video, {
+    readyState: { value: 4 },
+    paused: { value: false },
+    videoWidth: { value: 1280 },
+    videoHeight: { value: 720 },
+  })
 }
 
 test('room navigation mounts once and removes old resources without altering the player', (t) => {
@@ -241,7 +254,7 @@ test('the panel persists switches through navigation and reload and disposes dia
   trigger.click()
   assert.equal(trigger.getAttribute('aria-expanded'), 'true')
   assert.equal(root.activeElement, root.querySelector('h2'))
-  assert.equal(control(root, '播放器快捷控制').disabled, true)
+  assert.equal(control(root, '播放器快捷控制').checked, false)
   assert.equal(control(root, '截图与录制').disabled, true)
   assert.equal(compact.checked, false)
   assert.equal(diagnostics.checked, false)
@@ -299,7 +312,10 @@ test('export, import and reset apply only validated feature preferences', (t) =>
   exportButton.click()
   const exported = text.value
   assert.deepEqual(JSON.parse(exported), {
-    version: 1, features: { 'compact-panel': true, 'video-diagnostics': false },
+    version: 1, features: {
+      'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
+      'compact-panel': true, 'video-diagnostics': false,
+    },
   })
 
   for (const invalid of [
@@ -430,6 +446,7 @@ test('room preferences survive refresh, are isolated across rooms, and stay out 
   const exportButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '导出')
   exportButton.click()
   assert.deepEqual(JSON.parse(root.querySelector('textarea').value).features, {
+    'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
     'compact-panel': true, 'video-diagnostics': false,
   })
   const restoreButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
@@ -451,4 +468,143 @@ test('room preferences survive refresh, are isolated across rooms, and stay out 
 test('development build has an inline source map', async () => {
   const { outputFiles: [script] } = await buildUserscript({ dev: true, write: false })
   assert.match(script.text, /sourceMappingURL=data:application\/json;base64,/)
+})
+
+test('quality uses eligible native tiers once per room and lets the viewer override it', async (t) => {
+  const win = openRoom(t, playerFixture)
+  const { api } = fakeScriptApi()
+  const { document } = win
+  const video = document.querySelector('video')
+  mockMedia(video)
+  const current = document.querySelector('[data-e2e="quality"]')
+  const menu = document.querySelector('[data-e2e="quality-selector"]')
+  const selected = []
+  menu.addEventListener('click', (event) => {
+    selected.push(event.target.textContent)
+    current.textContent = event.target.textContent
+  })
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  control(root, '播放器快捷控制').click()
+  const select = root.querySelector('select')
+  assert.deepEqual([...select.options].map((option) => option.value), ['高清', '标清'])
+  assert.equal(select.value, '标清')
+  const preferHighest = control(root, '优先最高可用画质')
+  current.textContent = '原画'
+  preferHighest.click()
+  assert.deepEqual(selected, [])
+  preferHighest.click()
+  current.textContent = '标清'
+  preferHighest.click()
+  await delay(15)
+  assert.deepEqual(selected, ['高清'])
+  assert.equal(select.value, '高清')
+
+  select.value = '标清'
+  select.dispatchEvent(new win.Event('change'))
+  await delay(15)
+  assert.deepEqual(selected, ['高清', '标清'])
+  assert.equal(select.value, '标清')
+  navigate(win, '/2002')
+  assert.deepEqual(selected, ['高清', '标清'])
+  video.dispatchEvent(new win.Event('loadedmetadata'))
+  await delay(15)
+  assert.deepEqual(selected, ['高清', '标清', '高清'])
+
+  menu.remove()
+  await delay(15)
+  assert.equal(root.querySelector('select').disabled, true)
+  assert.equal(root.querySelector('select').selectedOptions[0].textContent, '高清')
+  stop()
+})
+
+test('wheel and pause guard act on the visible player and leave native controls and other scrolling alone', (t) => {
+  const win = openRoom(t, playerFixture)
+  const { api } = fakeScriptApi()
+  const video = win.document.querySelector('video')
+  const native = win.document.querySelector('.douyin-player-controls button')
+  const chat = win.document.querySelector('#chatroom')
+  mockMedia(video)
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const wheelSwitch = control(root, '播放器滚轮音量')
+  const pauseSwitch = control(root, '防误暂停')
+  wheelSwitch.click()
+  pauseSwitch.click()
+  video.volume = 0.5
+  video.muted = true
+  /** @param {Element} element */
+  function wheel(element, extra = {}) {
+    const event = new win.WheelEvent('wheel', {
+      bubbles: true, cancelable: true, deltaY: -100, clientX: 20, clientY: 20, ...extra,
+    })
+    element.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+  for (const target of [chat, native]) assert.equal(wheel(target), false)
+  assert.equal(wheel(video, { ctrlKey: true }), false)
+  assert.equal(wheel(video, { clientY: 400 }), false)
+  assert.equal(video.volume, 0.5)
+  assert.equal(wheel(video), true)
+  assert.equal(video.volume, 0.55)
+  assert.equal(video.muted, true)
+  wheelSwitch.click()
+  assert.equal(wheel(video), false)
+  wheelSwitch.click()
+  navigate(win, '/2002')
+  assert.equal(wheel(video), true)
+  assert.equal(video.volume, 0.6)
+
+  let videoClicks = 0
+  let nativeClicks = 0
+  video.addEventListener('click', () => { videoClicks += 1 })
+  native.addEventListener('click', () => { nativeClicks += 1 })
+  const click = (target) => target.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
+  click(video)
+  click(native)
+  assert.equal(videoClicks, 0)
+  assert.equal(nativeClicks, 1)
+  pauseSwitch.click()
+  click(video)
+  assert.equal(videoClicks, 1)
+  stop()
+  assert.equal(wheel(video), false)
+})
+
+test('player controls disable without video and restore owned crop and fullscreen on teardown', async (t) => {
+  const win = openRoom(t, playerFixture)
+  const { api } = fakeScriptApi()
+  const doc = win.document
+  const video = doc.querySelector('video')
+  const stage = doc.querySelector('.douyin-player')
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const toggle = control(root, '播放器快捷控制')
+  toggle.click()
+  const [fullscreen, fill] = root.querySelectorAll('.player-actions button')
+  assert.equal(fullscreen.disabled, true)
+  assert.equal(fill.disabled, true)
+  assert.match(fill.closest('.detail').textContent, /没有可用播放器/)
+
+  mockMedia(video)
+  video.style.setProperty('object-fit', 'contain')
+  let fullscreenElement = null
+  Object.defineProperties(doc, {
+    fullscreenEnabled: { value: true },
+    fullscreenElement: { get: () => fullscreenElement },
+  })
+  stage.requestFullscreen = async () => { fullscreenElement = stage }
+  doc.exitFullscreen = async () => { fullscreenElement = null }
+  video.dispatchEvent(new win.Event('loadedmetadata'))
+  await delay(15)
+  assert.equal(fullscreen.disabled, false)
+  fill.click()
+  assert.equal(video.style.objectFit, 'cover')
+  fullscreen.click()
+  await Promise.resolve()
+  assert.equal(doc.fullscreenElement, stage)
+  toggle.click()
+  assert.equal(doc.fullscreenElement, null)
+  assert.equal(video.style.objectFit, 'contain')
+  stop()
 })

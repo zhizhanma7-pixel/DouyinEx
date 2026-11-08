@@ -140,7 +140,7 @@ export function createSettingsPanel(document, features, actions) {
       const badge = element('span', '', 'badge')
       badge.id = `douyinex-availability-${feature.id}`
       input.setAttribute('aria-describedby', badge.id)
-      const detail = element('p', '', 'detail')
+      const detail = element('div', '', 'detail')
       detail.hidden = true
       input.addEventListener('change', () => {
         if (actions.setFeature(feature.id, input.checked)) {

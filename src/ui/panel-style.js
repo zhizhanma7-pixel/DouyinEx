@@ -15,7 +15,7 @@ export const panelStyles = `
   }
   *, *::before, *::after { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  button, textarea { font: inherit; }
+  button, select, textarea { font: inherit; }
   button, summary, label:has(input:enabled) { cursor: pointer; }
   :focus-visible { outline: 2px solid #83f5dc; outline-offset: 3px; }
   .trigger {
@@ -106,6 +106,9 @@ export const panelStyles = `
   .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: 7px; }
   .actions button { padding: 4px 8px; font-size: 12px; }
   .layout-actions { align-items: center; justify-content: space-between; margin-block: 4px; }
+  .player-actions { align-items: center; }
+  .player-actions select { max-inline-size: 100%; padding: 4px; border-radius: 6px; }
+  .player-actions button[aria-pressed="true"] { border-color: #83f5dc; }
   .feedback { margin: 0; color: #ffe1a0; font-size: 12px; }
   .feedback:not(:empty) { margin-block-start: 8px; }
   :host([data-compact]) .panel { inline-size: min(300px, calc(100vw - 36px)); padding: 10px; }
