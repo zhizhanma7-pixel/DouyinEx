@@ -1,3 +1,4 @@
+import { roomCleanup } from './room-cleanup.js'
 import { videoDiagnostics } from './video-diagnostics.js'
 
 /** @type {readonly import('../core/types.js').Feature[]} */
@@ -10,10 +11,7 @@ export const features = [
     id: 'danmaku-filters', label: '弹幕过滤', section: 'danmaku',
     defaultEnabled: false, capabilities: () => 'needs-test',
   },
-  {
-    id: 'page-cleanup', label: '隐藏页面杂项', section: 'cleanup',
-    defaultEnabled: false, capabilities: () => 'unsupported',
-  },
+  ...roomCleanup,
   {
     id: 'capture', label: '截图与录制', section: 'multimedia',
     defaultEnabled: false, capabilities: () => 'unsupported',

@@ -24,6 +24,7 @@ const availabilityLabels = {
  *   exportPreferences(): string
  *   importPreferences(text: string): string
  *   resetPreferences(): boolean
+ *   restoreRoomLayout(): boolean
  * }} actions
  */
 export function createSettingsPanel(document, features, actions) {
@@ -112,11 +113,23 @@ export function createSettingsPanel(document, features, actions) {
   )
   transfer.append(element('summary', '导入、导出与恢复'), inputLabel, preferences, transferActions)
 
+  const layoutActions = element('div', '', 'actions layout-actions')
+  layoutActions.hidden = true
+  layoutActions.append(
+    element('p', '清理设置仅应用于当前直播间。', 'subtitle'),
+    button('恢复原始布局', () => {
+      feedback.textContent = actions.restoreRoomLayout()
+        ? '已恢复当前直播间的原始布局。'
+        : '无法保存设置，请重试。'
+    }),
+  )
+
   /** @type {Map<string, { input: HTMLInputElement; badge: HTMLElement; detail: HTMLElement }>} */
   const rows = new Map()
   for (const [section, label] of Object.entries(sections)) {
     const group = element('fieldset', '', 'group')
     group.append(element('legend', label))
+    if (section === 'cleanup') group.append(layoutActions)
     for (const feature of features) {
       if (feature.section !== section) continue
       const row = element('div', '', 'row')
@@ -173,8 +186,12 @@ export function createSettingsPanel(document, features, actions) {
       if (!row) throw new Error('Missing settings row')
       return { host, detail: row.detail }
     },
-    /** @param {Map<string, import('../core/types.js').FeatureState>} states */
-    update(states) {
+    /**
+     * @param {Map<string, import('../core/types.js').FeatureState>} states
+     * @param {boolean} inRoom
+     */
+    update(states, inRoom) {
+      layoutActions.hidden = !inRoom
       for (const [id, row] of rows) {
         const state = states.get(id)
         if (!state) continue

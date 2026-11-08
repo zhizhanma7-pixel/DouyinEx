@@ -8,10 +8,11 @@ import { watchRoute } from '../src/core/watch-route.js'
 import { features } from '../src/features/registry.js'
 
 const fixture = await readFile(new URL('./fixtures/live-room.html', import.meta.url), 'utf8')
+const cleanupFixture = await readFile(new URL('./fixtures/room-cleanup.html', import.meta.url), 'utf8')
 const roomUrl = 'https://live.douyin.com/1001'
 
-function openRoom(t) {
-  const { window: win } = new JSDOM(fixture, { url: roomUrl, runScripts: 'outside-only' })
+function openRoom(t, html = fixture) {
+  const { window: win } = new JSDOM(html, { url: roomUrl, runScripts: 'outside-only' })
   win.onurlchange = null
   t.after(() => win.close())
   return win
@@ -241,7 +242,7 @@ test('the panel persists switches through navigation and reload and disposes dia
   assert.equal(trigger.getAttribute('aria-expanded'), 'true')
   assert.equal(root.activeElement, root.querySelector('h2'))
   assert.equal(control(root, '播放器快捷控制').disabled, true)
-  assert.equal(control(root, '隐藏页面杂项').disabled, true)
+  assert.equal(control(root, '截图与录制').disabled, true)
   assert.equal(compact.checked, false)
   assert.equal(diagnostics.checked, false)
 
@@ -290,7 +291,7 @@ test('export, import and reset apply only validated feature preferences', (t) =>
   const root = panelRoot(win)
   root.querySelector('.trigger').click()
   root.querySelector('details').open = true
-  const [exportButton, importButton, resetButton] = root.querySelectorAll('.actions button')
+  const [exportButton, importButton, resetButton] = root.querySelectorAll('.transfer .actions button')
   const text = root.querySelector('textarea')
   const feedback = root.querySelector('[role="status"]')
   const compact = control(root, '紧凑面板')
@@ -306,6 +307,7 @@ test('export, import and reset apply only validated feature preferences', (t) =>
     '{"version":2,"features":{}}',
     '{"version":1,"features":{"compact-panel":"true"}}',
     '{"version":1,"features":{"capture":true}}',
+    '{"version":1,"features":{"hide-promotions":true}}',
     '{"version":1,"features":{"__proto__":true}}',
     '{"version":1,"features":{},"safeMode":false}',
     ' '.repeat(8193),
@@ -341,6 +343,109 @@ test('a failed preference write reverts the control and leaves the feature off',
   assert.match(root.querySelector('[role="status"]').textContent, /无法保存/)
   assert.equal(warn.mock.calls[0].arguments[1], 'settings-write')
   stop()
+})
+
+test('room cleanup tracks supported variants and never hides protected controls', async (t) => {
+  const win = openRoom(t, cleanupFixture)
+  const { api } = fakeScriptApi()
+  const disconnect = t.mock.method(win.MutationObserver.prototype, 'disconnect')
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const doc = win.document
+  const $ = (selector) => doc.querySelector(selector)
+  const banner = $('[data-e2e="exhibition-banner"]')
+  const giftStrip = $('[data-e2e="gifts-container"]')
+  const effect = $('#GiftEffectLayout')
+  const background = $('.douyin-player-dynamic-background')
+  const video = $('video')
+  const videoMarkup = video.outerHTML
+  const promotionSwitch = control(root, '隐藏展馆推广横幅')
+  const giftSwitch = control(root, '隐藏礼物选项栏')
+  const overlaySwitch = control(root, '隐藏礼物特效和飘条')
+  const simpleSwitch = control(root, '简洁布局')
+  const theaterSwitch = control(root, '影院布局')
+  const darkSwitch = control(root, '深色布局')
+  const restore = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
+
+  assert.equal(promotionSwitch.checked, false)
+  assert.notEqual(win.getComputedStyle(banner).display, 'none')
+  promotionSwitch.click()
+  giftSwitch.click()
+  overlaySwitch.click()
+  assert.equal(win.getComputedStyle(banner).display, 'none')
+  assert.equal(win.getComputedStyle(giftStrip).display, 'none')
+  assert.equal(win.getComputedStyle(effect).visibility, 'hidden')
+
+  const report = doc.createElement('button')
+  report.setAttribute('aria-label', '举报')
+  banner.append(report)
+  await Promise.resolve()
+  assert.notEqual(win.getComputedStyle(banner).display, 'none')
+  report.remove()
+  await Promise.resolve()
+  assert.equal(win.getComputedStyle(banner).display, 'none')
+  giftStrip.append($('[data-e2e="recharge-btn"]'))
+  await Promise.resolve()
+  assert.notEqual(win.getComputedStyle(giftStrip).display, 'none')
+
+  simpleSwitch.click()
+  theaterSwitch.click()
+  darkSwitch.click()
+  assert.equal(win.getComputedStyle(background).visibility, 'hidden')
+  assert.equal(win.getComputedStyle(background).filter, 'brightness(.18)')
+  assert.equal($('#RightBackgroundLayout').getAttribute('data-douyinex-layout-v1'), 'dark-layout')
+  assert.equal(video.outerHTML, videoMarkup)
+  assert.notEqual(win.getComputedStyle($('[data-e2e="live-followbutton"]')).display, 'none')
+  assert.notEqual(win.getComputedStyle($('#chatroom')).display, 'none')
+
+  restore.click()
+  assert.equal(doc.querySelector('[data-douyinex-layout-v1]'), null)
+  assert.equal(disconnect.mock.callCount(), 1)
+  assert.equal([...root.querySelectorAll('input')].some((input) => input.checked), false)
+  stop()
+})
+
+test('room preferences survive refresh, are isolated across rooms, and stay out of global exports', (t) => {
+  const win = openRoom(t, cleanupFixture)
+  const values = new Map()
+  const { api } = fakeScriptApi(values)
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const promotion = control(root, '隐藏展馆推广横幅')
+  const dark = control(root, '深色布局')
+  promotion.click()
+  control(root, '紧凑面板').click()
+  assert.equal(values.has('featurePreferences:room:/1001'), true)
+  navigate(win, '/2002')
+  win.document.querySelector('[data-e2e="gifts-container"]').remove()
+  assert.equal(promotion.checked, false)
+  assert.equal(win.document.querySelector('[data-douyinex-layout-v1]'), null)
+  dark.click()
+  navigate(win, '/')
+  assert.equal(dark.disabled, true)
+  assert.equal(win.document.querySelector('[data-douyinex-layout-v1]'), null)
+  navigate(win, '/1001')
+  assert.equal(promotion.checked, true)
+  assert.equal(dark.checked, false)
+  const exportButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '导出')
+  exportButton.click()
+  assert.deepEqual(JSON.parse(root.querySelector('textarea').value).features, {
+    'compact-panel': true, 'video-diagnostics': false,
+  })
+  const restoreButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
+  restoreButton.click()
+  assert.equal(promotion.checked, false)
+  assert.equal(control(root, '紧凑面板').checked, true)
+  stop()
+
+  const refreshed = openRoom(t, cleanupFixture)
+  refreshed.history.replaceState(null, '', '/2002')
+  const stopRefreshed = startApp(refreshed, api, features)
+  const refreshedRoot = panelRoot(refreshed)
+  assert.equal(control(refreshedRoot, '深色布局').checked, true)
+  assert.equal(control(refreshedRoot, '隐藏展馆推广横幅').checked, false)
+  assert.equal(control(refreshedRoot, '紧凑面板').checked, true)
+  stopRefreshed()
 })
 
 test('development build has an inline source map', async () => {

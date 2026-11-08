@@ -6,7 +6,7 @@
     "noEmit": true,
     "target": "ES2022",
     "module": "NodeNext",
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*.js", "src/**/*.d.ts"]
 }

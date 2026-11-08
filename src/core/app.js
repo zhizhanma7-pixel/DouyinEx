@@ -17,6 +17,7 @@ export function startApp(win, api, features) {
   const settings = createSettings(api, logError, features)
   let safeMode = settings.readSafeMode()
   let preferences = settings.defaults
+  let roomPreferences = settings.roomDefaults
   /** @type {import('./types.js').Route | null} */
   let route = null
   /** @type {ReturnType<typeof createSettingsPanel> | undefined} */
@@ -28,13 +29,23 @@ export function startApp(win, api, features) {
   const menu = createSafeModeMenu(api, () => safeMode, toggleSafeMode)
 
   function applyPreferences() {
-    if (route && panel) panel.update(lifecycle.update(route, preferences, panel.getView))
+    if (!route || !panel) return
+    const effective = { ...preferences, ...roomPreferences }
+    panel.update(lifecycle.update(route, effective, panel.getView), route.kind === 'room')
   }
 
   /** @param {import('./types.js').Preferences} next */
   function savePreferences(next) {
     if (!settings.writePreferences(next)) return false
     preferences = next
+    applyPreferences()
+    return true
+  }
+
+  /** @param {import('./types.js').Preferences} next */
+  function saveRoomPreferences(next) {
+    if (route?.kind !== 'room' || !settings.writePreferences(next, route.key)) return false
+    roomPreferences = next
     applyPreferences()
     return true
   }
@@ -56,10 +67,18 @@ export function startApp(win, api, features) {
       return
     }
     route = nextRoute
+    roomPreferences = route.kind === 'room'
+      ? settings.readPreferences(route.key)
+      : settings.roomDefaults
     panel ??= createSettingsPanel(win.document, features, {
       setFeature(id, enabled) {
+        if (Object.hasOwn(settings.roomDefaults, id)) {
+          update()
+          if (route?.kind !== 'room') return false
+          return saveRoomPreferences({ ...settings.readPreferences(route.key, roomPreferences), [id]: enabled })
+        }
         if (!Object.hasOwn(settings.defaults, id)) return false
-        return savePreferences({ ...settings.readPreferences(preferences), [id]: enabled })
+        return savePreferences({ ...settings.readPreferences(null, preferences), [id]: enabled })
       },
       exportPreferences: () => settings.exportPreferences(preferences),
       importPreferences(text) {
@@ -68,6 +87,10 @@ export function startApp(win, api, features) {
         return savePreferences(next) ? '已导入并应用设置。' : '无法保存设置，请重试。'
       },
       resetPreferences: () => savePreferences(settings.defaults),
+      restoreRoomLayout() {
+        update()
+        return saveRoomPreferences(settings.roomDefaults)
+      },
     })
     dock ??= watchSettingsDock(win, panel.host)
     dock.update(nextRoute)
