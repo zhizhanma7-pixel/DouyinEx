@@ -105,6 +105,7 @@ export const panelStyles = `
   }
   .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: 7px; }
   .actions button { padding: 4px 8px; font-size: 12px; }
+  .layout-actions { align-items: center; justify-content: space-between; margin-block: 4px; }
   .feedback { margin: 0; color: #ffe1a0; font-size: 12px; }
   .feedback:not(:empty) { margin-block-start: 8px; }
   :host([data-compact]) .panel { inline-size: min(300px, calc(100vw - 36px)); padding: 10px; }

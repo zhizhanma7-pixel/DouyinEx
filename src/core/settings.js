@@ -13,18 +13,28 @@ function isRecord(value) {
  * @param {readonly import('./types.js').Feature[]} features
  */
 export function createSettings(api, logError, features) {
-  /** @type {import('./types.js').Preferences} */
-  const defaults = Object.fromEntries(
-    features.filter((feature) => feature.mount).map(({ id, defaultEnabled }) => [id, defaultEnabled]),
-  )
+  const defaults = defaultPreferences(false)
+  const roomDefaults = defaultPreferences(true)
 
-  /** @param {unknown} value */
-  function decode(value) {
+  /** @param {boolean} room @returns {import('./types.js').Preferences} */
+  function defaultPreferences(room) {
+    return Object.fromEntries(features
+      .filter((feature) => feature.mount && (feature.scope === 'room') === room)
+      .map(({ id, defaultEnabled }) => [id, defaultEnabled]))
+  }
+
+  /** @param {string | null} roomKey */
+  function storageKey(roomKey) {
+    return roomKey ? `${PREFERENCES_KEY}:room:${roomKey}` : PREFERENCES_KEY
+  }
+
+  /** @param {unknown} value @param {import('./types.js').Preferences} known */
+  function decode(value, known) {
     if (!isRecord(value) || value.version !== 1 || !isRecord(value.features)) return null
     if (Object.keys(value).some((key) => key !== 'version' && key !== 'features')) return null
-    const preferences = { ...defaults }
+    const preferences = { ...known }
     for (const [id, enabled] of Object.entries(value.features)) {
-      if (!Object.hasOwn(defaults, id) || typeof enabled !== 'boolean') return null
+      if (!Object.hasOwn(known, id) || typeof enabled !== 'boolean') return null
       preferences[id] = enabled
     }
     return preferences
@@ -32,19 +42,27 @@ export function createSettings(api, logError, features) {
 
   return {
     defaults,
-    /** @param {import('./types.js').Preferences} [fallback] */
-    readPreferences(fallback = defaults) {
+    roomDefaults,
+    /**
+     * @param {string | null} [roomKey]
+     * @param {import('./types.js').Preferences} [fallback]
+     */
+    readPreferences(roomKey = null, fallback) {
+      const known = roomKey ? roomDefaults : defaults
       try {
-        return decode(api.getValue(PREFERENCES_KEY, null)) ?? defaults
+        return decode(api.getValue(storageKey(roomKey), null), known) ?? known
       } catch {
         logError('settings-read')
-        return fallback
+        return fallback ?? known
       }
     },
-    /** @param {import('./types.js').Preferences} preferences */
-    writePreferences(preferences) {
+    /**
+     * @param {import('./types.js').Preferences} preferences
+     * @param {string | null} [roomKey]
+     */
+    writePreferences(preferences, roomKey = null) {
       try {
-        api.setValue(PREFERENCES_KEY, { version: 1, features: preferences })
+        api.setValue(storageKey(roomKey), { version: 1, features: preferences })
         return true
       } catch {
         logError('settings-write')
@@ -59,7 +77,7 @@ export function createSettings(api, logError, features) {
     importPreferences(text) {
       if (text.length > MAX_PREFERENCES_LENGTH) return null
       try {
-        return decode(JSON.parse(text))
+        return decode(JSON.parse(text), defaults)
       } catch {
         return null
       }

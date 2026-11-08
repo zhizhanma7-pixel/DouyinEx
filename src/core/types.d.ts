@@ -19,6 +19,7 @@ export type Feature = {
   id: string
   label: string
   section: Section
+  scope?: 'room'
   defaultEnabled: boolean
   capabilities(route: Route): Availability
   mount?(context: {

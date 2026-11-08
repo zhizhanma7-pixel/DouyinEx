@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8">
+  <title>DouyinEx layout fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; color: #f3f5fa; background: #131722; font: 15px system-ui, sans-serif; }
+    button, input { font: inherit; padding: 6px 10px; }
+    h1 { margin: 0 0 14px; font-size: 18px; }
+    #ContainerBackgroundLayout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 12px; }
+    #LeftBackgroundLayout { position: relative; overflow: hidden; background: #252d40; border-radius: 10px; }
+    .douyin-player-dynamic-background { position: absolute; inset: 0; background: linear-gradient(130deg, #673749, #283966); }
+    #room_info_bar, #PlayerLayout, .gift-bar { position: relative; }
+    #room_info_bar, .gift-bar { display: flex; gap: 8px; align-items: center; padding: 10px; }
+    #room_info_bar div, [data-e2e="gifts-container"] { border-radius: 8px; padding: 8px; background: #9a4871; }
+    #PlayerLayout { padding: 0 12px; }
+    video { display: block; width: 100%; aspect-ratio: 16 / 8; background: #1b2432; }
+    #GiftEffectLayout, .GiftTrayPlugin { position: absolute; padding: 7px; background: #6b497f; border-radius: 6px; }
+    #GiftEffectLayout { top: 20px; left: 28px; }
+    .GiftTrayPlugin { left: 28px; bottom: 52px; }
+    #RightBackgroundLayout { padding: 16px; border-radius: 10px; background: #20293a; }
+    #chatroom { display: grid; gap: 10px; }
+    @media (max-width: 760px) { #ContainerBackgroundLayout { grid-template-columns: 1fr; } }
+  </style>
+  <h1>模拟直播间 · 双栏布局</h1>
+  <main data-e2e="living-container">
+    <div id="ContainerBackgroundLayout">
+      <section id="LeftBackgroundLayout">
+        <div class="douyin-player-dynamic-background"></div>
+        <header id="room_info_bar">
+          <button data-e2e="live-followbutton">关注</button>
+          <button aria-label="举报">举报</button>
+          <div data-e2e="exhibition-banner">展馆推广</div>
+        </header>
+        <div id="PlayerLayout">
+          <video controls muted></video>
+          <div id="PlayerControlLayout"></div>
+          <div id="GiftEffectLayout">礼物特效</div>
+          <div id="GiftTrayLayout"><span class="GiftTrayPlugin">礼物飘条</span></div>
+        </div>
+        <div class="gift-bar">
+          <div data-e2e="gifts-container"><span data-e2e="gift-btn">礼物选项</span></div>
+          <button data-e2e="recharge-btn">充值</button>
+        </div>
+      </section>
+      <aside id="RightBackgroundLayout">
+        <div id="chatroom">
+          <strong>直播聊天</strong>
+          <p>这是一条模拟消息。</p>
+          <label for="chat-input">说点什么</label>
+          <input id="chat-input">
+        </div>
+      </aside>
+    </div>
+  </main>
