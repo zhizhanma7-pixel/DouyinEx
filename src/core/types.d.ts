@@ -1,6 +1,6 @@
 export type ScriptApi = {
   getValue(key: string, defaultValue: boolean | null): unknown
-  setValue(key: string, value: boolean | PreferencesFile): void
+  setValue(key: string, value: boolean | string | PreferencesFile): void
   registerMenuCommand(label: string, callback: () => void): number | string
   unregisterMenuCommand(id: number | string): void
 }
@@ -14,6 +14,7 @@ export type Section = 'playback' | 'danmaku' | 'cleanup' | 'multimedia' | 'advan
 export type Availability = 'supported' | 'unsupported' | 'needs-test'
 export type Preferences = Record<string, boolean>
 export type PreferencesFile = { version: 1; features: Preferences }
+export type FeatureStorage = { read(): string; write(value: string): boolean }
 
 export type Feature = {
   id: string
@@ -27,6 +28,7 @@ export type Feature = {
     route: Route
     signal: AbortSignal
     view: { host: HTMLElement; detail: HTMLElement }
+    storage: FeatureStorage
   }): void | { dispose(): void }
 }
 

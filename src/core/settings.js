@@ -43,6 +43,30 @@ export function createSettings(api, logError, features) {
   return {
     defaults,
     roomDefaults,
+    /** @param {string} id @returns {import('./types.js').FeatureStorage} */
+    featureStorage(id) {
+      const key = `featureOptions:${id}`
+      return {
+        read() {
+          try {
+            const value = api.getValue(key, null)
+            return typeof value === 'string' ? value : ''
+          } catch {
+            logError('settings-read')
+            return ''
+          }
+        },
+        write(value) {
+          try {
+            api.setValue(key, value)
+            return true
+          } catch {
+            logError('settings-write')
+            return false
+          }
+        },
+      }
+    },
     /**
      * @param {string | null} [roomKey]
      * @param {import('./types.js').Preferences} [fallback]

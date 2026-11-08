@@ -22,7 +22,7 @@ function createLayoutSession(document) {
   const win = document.defaultView
   if (!win) throw new Error('Room layout requires a window')
   const browser = win
-  const removeStyle = installStyle(document, browser.CSSStyleSheet)
+  const removeStyle = installDocumentStyle(document, css)
   /** @type {Map<string, HTMLElement>} */
   const active = new Map()
   /** @type {Map<Element, string[]>} */
@@ -121,17 +121,4 @@ function createLayoutSession(document) {
   }
 }
 
-/** @param {Document} document @param {typeof CSSStyleSheet} Sheet */
-function installStyle(document, Sheet) {
-  if ('adoptedStyleSheets' in document && typeof Sheet.prototype.replaceSync === 'function') {
-    const sheet = new Sheet()
-    sheet.replaceSync(css)
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
-    return () => { document.adoptedStyleSheets = document.adoptedStyleSheets.filter((item) => item !== sheet) }
-  }
-
-  const style = document.createElement('style')
-  style.textContent = css
-  document.head.append(style)
-  return () => style.remove()
-}
+import { installDocumentStyle } from '../../core/document-style.js'

@@ -7,6 +7,7 @@ import { buildUserscript } from '../scripts/build.js'
 import { startApp } from '../src/core/app.js'
 import { watchRoute } from '../src/core/watch-route.js'
 import { features } from '../src/features/registry.js'
+import { watchDanmaku } from '../src/adapters/douyin/danmaku.js'
 
 const fixture = await readFile(new URL('./fixtures/live-room.html', import.meta.url), 'utf8')
 const cleanupFixture = await readFile(new URL('./fixtures/room-cleanup.html', import.meta.url), 'utf8')
@@ -314,7 +315,7 @@ test('export, import and reset apply only validated feature preferences', (t) =>
   assert.deepEqual(JSON.parse(exported), {
     version: 1, features: {
       'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
-      'compact-panel': true, 'video-diagnostics': false,
+      'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
     },
   })
 
@@ -447,7 +448,7 @@ test('room preferences survive refresh, are isolated across rooms, and stay out 
   exportButton.click()
   assert.deepEqual(JSON.parse(root.querySelector('textarea').value).features, {
     'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
-    'compact-panel': true, 'video-diagnostics': false,
+    'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
   })
   const restoreButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
   restoreButton.click()
@@ -607,4 +608,58 @@ test('player controls disable without video and restore owned crop and fullscree
   assert.equal(doc.fullscreenElement, null)
   assert.equal(video.style.objectFit, 'contain')
   stop()
+})
+
+test('danmaku normalizes text and emoji, filters recycled rows, and leaves native input events alone', async (t) => {
+  const win = openRoom(t, `<div id="chatroom">
+    <div class="webcast-chatroom___list">
+      <div class="webcast-chatroom___item"><span class="webcast-chatroom___nickname">甲：</span>
+        <span class="webcast-chatroom___content-with-emoji-text">你好<img alt="😊"><span hidden>隐藏</span></span></div>
+      <div class="webcast-chatroom___item"><span class="webcast-chatroom___nickname">乙：</span>
+        <span class="webcast-chatroom___content-with-emoji-text">你好<img alt="😊"></span></div>
+      <div class="webcast-chatroom___item">系统通知</div>
+    </div><textarea>未发送的草稿</textarea><div contenteditable="true">输入内容</div></div>`)
+  const { api } = fakeScriptApi()
+  const doc = win.document
+  const list = doc.querySelector('.webcast-chatroom___list')
+  const [first, second, notice] = list.children
+  const scope = new win.AbortController()
+  let entries = []
+  watchDanmaku(doc, '1001', scope.signal, (snapshot) => { entries = snapshot.entries })
+  assert.equal(entries.length, 2)
+  assert.deepEqual({ ...entries[0].message, timestamp: 0 }, {
+    id: '1', roomId: '1001', author: '甲', text: '你好😊', timestamp: 0, kind: 'text', source: 'visible-dom',
+  })
+  const original = entries[1].message
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const toggle = control(root, '弹幕过滤')
+  toggle.click()
+  const marker = 'data-douyinex-danmaku'
+  assert.equal(second.getAttribute(marker), 'hidden')
+  assert.equal(notice.hasAttribute(marker), false)
+  const detail = toggle.closest('.row').querySelector('.detail')
+  detail.querySelector('textarea').value = 'Spam'
+  detail.querySelector('button').click()
+  second.querySelector('.webcast-chatroom___content-with-emoji-text').textContent = 'ＳＰＡＭ'
+  await delay(60)
+  assert.equal(second.getAttribute(marker), 'hidden')
+  assert.notEqual(entries[1].message.id, original.id)
+  assert.equal(entries[0].node, first)
+  list.scrollTop = 33
+  const rows = Array.from({ length: 200 }, () => first.cloneNode(true))
+  list.append(...rows)
+  await delay(60)
+  assert.equal(entries.length, 180)
+  assert.equal(list.scrollTop, 33)
+
+  for (const target of doc.querySelectorAll('#chatroom textarea,[contenteditable]')) {
+    const event = new win.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true })
+    assert.equal(target.dispatchEvent(event), true)
+    assert.equal(target.textContent.length > 0, true)
+  }
+  toggle.click()
+  assert.equal(doc.querySelector(`[${marker}]`), null)
+  stop()
+  scope.abort()
 })
