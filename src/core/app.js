@@ -13,8 +13,8 @@ import { watchRoute } from './watch-route.js'
  * @param {readonly import('./types.js').Feature[]} features
  */
 export function startApp(win, api, features) {
-  const lifecycle = createLifecycle(win, features, logError)
   const settings = createSettings(api, logError, features)
+  const lifecycle = createLifecycle(win, features, logError, settings.featureStorage)
   let safeMode = settings.readSafeMode()
   let preferences = settings.defaults
   let roomPreferences = settings.roomDefaults

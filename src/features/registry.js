@@ -27,7 +27,7 @@ export const features = [
   },
   {
     id: 'danmaku-filters', label: '弹幕过滤', section: 'danmaku',
-    defaultEnabled: false, capabilities: () => 'needs-test',
+    defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuFilters,
   },
   ...roomCleanup,
   {
@@ -44,3 +44,4 @@ export const features = [
   },
   videoDiagnostics,
 ]
+import { mountDanmakuFilters } from './danmaku-filters.js'

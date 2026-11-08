@@ -89,6 +89,7 @@ export const panelStyles = `
   .badge[data-state="supported"] { color: #a7f3dc; background: #233f3a; }
   .badge[data-state="needs-test"] { color: #ffe1a0; background: #493920; }
   .detail { grid-column: 1 / -1; margin: 0 0 2px 26px; font-size: 12px; color: #bfe2dc; }
+  .detail textarea { display: block; inline-size: 100%; resize: vertical; }
   .transfer { margin-block-start: 8px; }
   .transfer summary { font-size: 13px; color: #aeeadb; }
   .transfer label { display: block; margin-block: 8px 4px; font-size: 12px; }

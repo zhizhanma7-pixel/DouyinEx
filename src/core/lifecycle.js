@@ -2,8 +2,9 @@
  * @param {Window & typeof globalThis} win
  * @param {readonly import('./types.js').Feature[]} features
  * @param {(code: import('./types.js').ErrorCode) => void} logError
+ * @param {(id: string) => import('./types.js').FeatureStorage} featureStorage
  */
-export function createLifecycle(win, features, logError) {
+export function createLifecycle(win, features, logError, featureStorage) {
   /** @type {string | null} */
   let routeKey = null
   /** @type {Map<string, () => void>} */
@@ -59,7 +60,7 @@ export function createLifecycle(win, features, logError) {
       const scope = new win.AbortController()
       try {
         const view = getView(id)
-        const lifetime = mount({ document: win.document, route, signal: scope.signal, view })
+        const lifetime = mount({ document: win.document, route, signal: scope.signal, view, storage: featureStorage(id) })
         cleanups.set(id, () => {
           scope.abort()
           lifetime?.dispose()
