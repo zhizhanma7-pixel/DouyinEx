@@ -315,6 +315,7 @@ test('export, import and reset apply only validated feature preferences', (t) =>
   assert.deepEqual(JSON.parse(exported), {
     version: 1, features: {
       'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
+      'picture-in-picture': false, multiview: false,
       'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
     },
   })
@@ -448,6 +449,7 @@ test('room preferences survive refresh, are isolated across rooms, and stay out 
   exportButton.click()
   assert.deepEqual(JSON.parse(root.querySelector('textarea').value).features, {
     'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
+    'picture-in-picture': false, multiview: false,
     'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
   })
   const restoreButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
@@ -662,4 +664,79 @@ test('danmaku normalizes text and emoji, filters recycled rows, and leaves nativ
   assert.equal(doc.querySelector(`[${marker}]`), null)
   stop()
   scope.abort()
+})
+
+test('PiP is gesture-only and closes the window it opened when disabled', async (t) => {
+  const win = openRoom(t, playerFixture)
+  const { api } = fakeScriptApi()
+  const doc = win.document
+  const video = doc.querySelector('video')
+  mockMedia(video)
+  let active = null
+  let supported = false
+  Object.defineProperties(doc, {
+    pictureInPictureEnabled: { get: () => supported },
+    pictureInPictureElement: { get: () => active },
+  })
+  const enter = t.mock.method(video, 'play', async () => {})
+  video.requestPictureInPicture = async () => { active = video }
+  doc.exitPictureInPicture = async () => { active = null }
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const toggle = control(root, '画中画')
+  toggle.click()
+  const button = toggle.closest('.row').querySelector('button')
+  assert.equal(button.disabled, true)
+  supported = true
+  video.dispatchEvent(new win.Event('loadedmetadata'))
+  await delay(15)
+  assert.equal(button.disabled, false)
+  assert.equal(active, null)
+  button.click()
+  await Promise.resolve()
+  assert.equal(active, video)
+  toggle.click()
+  assert.equal(active, null)
+  assert.equal(enter.mock.callCount(), 0)
+  stop()
+})
+
+test('multiview validates room URLs, caps at two, reorders without moving frames, and tears down', (t) => {
+  const win = openRoom(t)
+  const { api } = fakeScriptApi()
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const toggle = control(root, '双房间视图')
+  toggle.click()
+  toggle.closest('.row').querySelector('button').click()
+  const board = root.querySelector('.multiview')
+  const input = board.querySelector('input')
+  const button = (text) => [...board.querySelectorAll('button')].find((node) => node.textContent === text)
+  const add = button('添加房间')
+  for (const value of ['https://example.com/1001', 'https://x@live.douyin.com/1001']) {
+    input.value = value
+    add.click()
+  }
+  assert.equal(board.querySelectorAll('iframe').length, 0)
+  input.value = '2001'
+  add.click()
+  input.value = 'https://live.douyin.com/2001/?ignored=1'
+  add.click()
+  assert.equal(board.querySelectorAll('iframe').length, 1)
+  input.value = 'https://live.douyin.com/2002#ignored'
+  add.click()
+  const frames = [...board.querySelectorAll('iframe')]
+  assert.equal(add.disabled, true)
+  assert.deepEqual(frames.map((node) => node.getAttribute('src')), [
+    'https://live.douyin.com/2001', 'https://live.douyin.com/2002',
+  ])
+  button('交换位置').click()
+  assert.deepEqual([...board.querySelectorAll('iframe')], frames)
+  assert.deepEqual(frames.map((node) => node.closest('article').style.order), ['1', '0'])
+  button('关闭房间').click()
+  assert.equal(board.querySelectorAll('iframe').length, 1)
+  navigate(win, '/2002')
+  assert.equal(root.querySelector('.multiview'), null)
+  assert.equal(frames[1].isConnected, false)
+  stop()
 })
