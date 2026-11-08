@@ -1,5 +1,6 @@
 import { mountDanmakuExport } from './danmaku-export.js'
 import { mountDanmakuFilters } from './danmaku-filters.js'
+import { mountDanmakuStats } from './danmaku-stats.js'
 import { mountHighestQuality } from './highest-quality.js'
 import { mountMediaCapture } from './media-capture.js'
 import { mountMultiview } from './multiview.js'
@@ -33,6 +34,10 @@ export const features = [
   {
     id: 'danmaku-filters', label: '弹幕过滤', section: 'danmaku',
     defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuFilters,
+  },
+  {
+    id: 'danmaku-stats', label: '弹幕统计', section: 'danmaku',
+    defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuStats,
   },
   ...roomCleanup,
   {
