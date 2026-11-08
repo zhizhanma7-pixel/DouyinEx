@@ -1,0 +1,23 @@
+{
+  "name": "douyinex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=24" },
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:dev": "node scripts/build.js --dev",
+    "lint": "eslint .",
+    "typecheck": "tsc",
+    "test": "node --test",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "eslint": "10.14.0",
+    "jsdom": "28.1.0",
+    "typescript": "5.9.3"
+  }
+}
