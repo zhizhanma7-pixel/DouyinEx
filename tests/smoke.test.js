@@ -256,7 +256,7 @@ test('the panel persists switches through navigation and reload and disposes dia
   assert.equal(trigger.getAttribute('aria-expanded'), 'true')
   assert.equal(root.activeElement, root.querySelector('h2'))
   assert.equal(control(root, '播放器快捷控制').checked, false)
-  assert.equal(control(root, '截图与录制').disabled, true)
+  assert.equal(control(root, '截图与录制').checked, false)
   assert.equal(compact.checked, false)
   assert.equal(diagnostics.checked, false)
 
@@ -316,6 +316,7 @@ test('export, import and reset apply only validated feature preferences', (t) =>
     version: 1, features: {
       'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
       'picture-in-picture': false, multiview: false,
+      capture: false, 'danmaku-export': false,
       'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
     },
   })
@@ -324,7 +325,7 @@ test('export, import and reset apply only validated feature preferences', (t) =>
     'invalid JSON',
     '{"version":2,"features":{}}',
     '{"version":1,"features":{"compact-panel":"true"}}',
-    '{"version":1,"features":{"capture":true}}',
+    '{"version":1,"features":{"unknown-feature":true}}',
     '{"version":1,"features":{"hide-promotions":true}}',
     '{"version":1,"features":{"__proto__":true}}',
     '{"version":1,"features":{},"safeMode":false}',
@@ -450,6 +451,7 @@ test('room preferences survive refresh, are isolated across rooms, and stay out 
   assert.deepEqual(JSON.parse(root.querySelector('textarea').value).features, {
     'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
     'picture-in-picture': false, multiview: false,
+    capture: false, 'danmaku-export': false,
     'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
   })
   const restoreButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
@@ -738,5 +740,108 @@ test('multiview validates room URLs, caps at two, reorders without moving frames
   navigate(win, '/2002')
   assert.equal(root.querySelector('.multiview'), null)
   assert.equal(frames[1].isConnected, false)
+  stop()
+})
+
+test('capture requires consent and reports inaccessible or protected frames', (t) => {
+  const win = openRoom(t, playerFixture)
+  const { api } = fakeScriptApi()
+  const video = win.document.querySelector('video')
+  mockMedia(video)
+  const stop = startApp(win, api, features)
+  const toggle = control(panelRoot(win), '截图与录制')
+  toggle.click()
+  const detail = toggle.closest('.row').querySelector('.detail')
+  const consent = detail.querySelector('input')
+  const [frame, record] = detail.querySelectorAll('button')
+  assert.equal(frame.disabled, true)
+  assert.equal(record.disabled, true)
+  consent.click()
+  assert.equal(frame.disabled, false)
+  const draw = t.mock.method(win.HTMLCanvasElement.prototype, 'getContext', () => ({
+    drawImage() {},
+  }))
+  t.mock.method(win.HTMLCanvasElement.prototype, 'toBlob', () => {
+    throw new win.DOMException('origin', 'SecurityError')
+  })
+  frame.click()
+  assert.equal(draw.mock.callCount(), 1)
+  assert.match(detail.querySelector('[role="status"]').textContent, /跨域/)
+  assert.equal(detail.querySelector('a').hidden, true)
+  video.dispatchEvent(new win.Event('encrypted'))
+  assert.equal(frame.disabled, true)
+  assert.match(detail.querySelector('[role="status"]').textContent, /受保护/)
+  stop()
+})
+
+test('recording teardown never stops a shared source video track', (t) => {
+  const win = openRoom(t, playerFixture)
+  const { api } = fakeScriptApi()
+  const video = win.document.querySelector('video')
+  mockMedia(video)
+  const base = { id: 'source-id', kind: 'video', readyState: 'live' }
+  const source = { ...base, stop: t.mock.fn() }
+  const clone = { ...base, id: 'copy-id', stop: t.mock.fn() }
+  const captured = { ...base, stop: t.mock.fn(), clone: t.mock.fn(() => clone) }
+  win.MediaStream = class {
+    constructor(tracks) { this.tracks = tracks }
+    getTracks() { return this.tracks }
+    getVideoTracks() { return this.tracks }
+  }
+  win.MediaRecorder = class extends win.EventTarget {
+    static isTypeSupported() { return true }
+    state = 'inactive'
+    start() { this.state = 'recording' }
+    stop() { this.state = 'inactive' }
+  }
+  video.srcObject = new win.MediaStream([source])
+  video.captureStream = () => new win.MediaStream([captured])
+  t.mock.method(win.HTMLCanvasElement.prototype, 'getContext', () => ({
+    drawImage() {},
+    getImageData() {},
+  }))
+
+  const stop = startApp(win, api, features)
+  const toggle = control(panelRoot(win), '截图与录制')
+  toggle.click()
+  const detail = toggle.closest('.row').querySelector('.detail')
+  detail.querySelector('input').click()
+  const record = [...detail.querySelectorAll('button')].find((node) => node.textContent.includes('录制'))
+  record.click()
+  assert.equal(captured.clone.mock.callCount(), 1)
+  toggle.click()
+  assert.equal(source.stop.mock.callCount(), 0)
+  assert.equal(captured.stop.mock.callCount(), 0)
+  assert.equal(clone.stop.mock.callCount(), 1)
+  stop()
+})
+
+test('danmaku export is local, timestamped, and resets on room navigation', async (t) => {
+  const win = openRoom(t, `<div id="chatroom"><div class="webcast-chatroom___list">
+    <div class="webcast-chatroom___item"><span class="webcast-chatroom___nickname">不要导出昵称</span>
+    <span class="webcast-chatroom___content-with-emoji-text">可见文本<img alt="😊"></span></div>
+    </div></div>`)
+  const { api } = fakeScriptApi()
+  let contents
+  win.URL.createObjectURL = (blob) => {
+    contents = blob.text()
+    return 'blob:https://live.douyin.com/local-test'
+  }
+  let revoked = 0
+  win.URL.revokeObjectURL = () => { revoked += 1 }
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const toggle = control(root, '观察与导出弹幕')
+  toggle.click()
+  const detail = toggle.closest('.row').querySelector('.detail')
+  const button = detail.querySelector('button')
+  assert.equal(button.disabled, false)
+  button.click()
+  assert.match(detail.querySelector('a').download, /^douyinex-danmaku-.*\.txt$/)
+  assert.match(await contents, /^\d{4}-\d\d-\d\dT[^\t]+\t可见文本😊\n$/)
+  navigate(win, '/2002')
+  assert.equal(revoked, 1)
+  assert.equal(detail.querySelector('a').hidden, true)
+  assert.equal(detail.querySelector('button').disabled, true)
   stop()
 })

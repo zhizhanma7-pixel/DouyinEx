@@ -106,6 +106,7 @@ export const panelStyles = `
   }
   .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: 7px; }
   .actions button { padding: 4px 8px; font-size: 12px; }
+  .actions a { align-self: center; color: #a7f3dc; }
   .layout-actions { align-items: center; justify-content: space-between; margin-block: 4px; }
   .player-actions { align-items: center; }
   .player-actions select { max-inline-size: 100%; padding: 4px; border-radius: 6px; }

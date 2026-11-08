@@ -1,4 +1,7 @@
+import { mountDanmakuExport } from './danmaku-export.js'
+import { mountDanmakuFilters } from './danmaku-filters.js'
 import { mountHighestQuality } from './highest-quality.js'
+import { mountMediaCapture } from './media-capture.js'
 import { mountMultiview } from './multiview.js'
 import { mountPictureInPicture } from './picture-in-picture.js'
 import { mountPlayerControls } from './player-controls.js'
@@ -42,7 +45,11 @@ export const features = [
   },
   {
     id: 'capture', label: '截图与录制', section: 'multimedia',
-    defaultEnabled: false, capabilities: () => 'unsupported',
+    defaultEnabled: false, capabilities: roomOnly, mount: mountMediaCapture,
+  },
+  {
+    id: 'danmaku-export', label: '观察与导出弹幕', section: 'multimedia',
+    defaultEnabled: false, capabilities: roomOnly, mount: mountDanmakuExport,
   },
   {
     id: 'compact-panel', label: '紧凑面板', section: 'advanced',
@@ -54,4 +61,3 @@ export const features = [
   },
   videoDiagnostics,
 ]
-import { mountDanmakuFilters } from './danmaku-filters.js'
