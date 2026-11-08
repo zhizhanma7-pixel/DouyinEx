@@ -1,6 +1,6 @@
 export type ScriptApi = {
-  getValue(key: string, defaultValue: boolean): unknown
-  setValue(key: string, value: boolean): void
+  getValue(key: string, defaultValue: boolean | null): unknown
+  setValue(key: string, value: boolean | PreferencesFile): void
   registerMenuCommand(label: string, callback: () => void): number | string
   unregisterMenuCommand(id: number | string): void
 }
@@ -10,13 +10,29 @@ export type Route = {
   key: string
 }
 
+export type Section = 'playback' | 'danmaku' | 'cleanup' | 'multimedia' | 'advanced' | 'diagnostics'
+export type Availability = 'supported' | 'unsupported' | 'needs-test'
+export type Preferences = Record<string, boolean>
+export type PreferencesFile = { version: 1; features: Preferences }
+
 export type Feature = {
-  route: Route['kind']
-  mount(context: {
+  id: string
+  label: string
+  section: Section
+  defaultEnabled: boolean
+  capabilities(route: Route): Availability
+  mount?(context: {
     document: Document
     route: Route
     signal: AbortSignal
-  }): void | (() => void)
+    view: { host: HTMLElement; detail: HTMLElement }
+  }): void | { dispose(): void }
+}
+
+export type FeatureState = {
+  availability: Availability
+  enabled: boolean
+  failed: boolean
 }
 
 export type ErrorCode = 'settings-read' | 'settings-write' | 'feature-mount' | 'feature-cleanup'

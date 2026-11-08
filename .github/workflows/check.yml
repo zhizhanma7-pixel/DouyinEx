@@ -1,4 +1,4 @@
-name: CP-01 checks
+name: Userscript checks
 
 on:
   pull_request:

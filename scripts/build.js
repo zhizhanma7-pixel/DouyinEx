@@ -12,7 +12,7 @@ export async function buildUserscript({ dev = false, write = true } = {}) {
     '// @name         DouyinEx',
     '// @namespace    https://github.com/zhizhanma7-pixel/DouyinEx',
     `// @version      ${version}`,
-    '// @description  Lifecycle foundation for Douyin Web Live',
+    '// @description  Local settings and enhancements for Douyin Web Live',
     '// @license      MIT',
     '// @match        https://live.douyin.com/*',
     '// @run-at       document-idle',
