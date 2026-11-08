@@ -317,7 +317,7 @@ test('export, import and reset apply only validated feature preferences', (t) =>
       'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
       'picture-in-picture': false, multiview: false,
       capture: false, 'danmaku-export': false,
-      'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
+      'danmaku-filters': false, 'danmaku-stats': false, 'compact-panel': true, 'video-diagnostics': false,
     },
   })
 
@@ -452,7 +452,7 @@ test('room preferences survive refresh, are isolated across rooms, and stay out 
     'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
     'picture-in-picture': false, multiview: false,
     capture: false, 'danmaku-export': false,
-    'danmaku-filters': false, 'compact-panel': true, 'video-diagnostics': false,
+    'danmaku-filters': false, 'danmaku-stats': false, 'compact-panel': true, 'video-diagnostics': false,
   })
   const restoreButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
   restoreButton.click()
@@ -843,5 +843,33 @@ test('danmaku export is local, timestamped, and resets on room navigation', asyn
   assert.equal(revoked, 1)
   assert.equal(detail.querySelector('a').hidden, true)
   assert.equal(detail.querySelector('button').disabled, true)
+  stop()
+})
+
+test('danmaku stats count new observations, estimate rate, and reset on room navigation', async (t) => {
+  const win = openRoom(t, `<div id="chatroom"><div class="webcast-chatroom___list">
+    <div class="webcast-chatroom___item"><span class="webcast-chatroom___nickname">甲</span>
+    <span class="webcast-chatroom___content-with-emoji-text">弹幕</span></div></div></div>`)
+  const { api } = fakeScriptApi()
+  let now = 0
+  t.mock.method(win.performance, 'now', () => now)
+  const stop = startApp(win, api, features)
+  const toggle = control(panelRoot(win), '弹幕统计')
+  const detail = toggle.closest('.row').querySelector('.detail')
+  toggle.click()
+  assert.match(detail.textContent, /新识别文本 0 条/)
+  const list = win.document.querySelector('.webcast-chatroom___list')
+  const row = list.firstElementChild.cloneNode(true)
+  now = 12000
+  list.append(row)
+  await delay(60)
+  assert.match(detail.textContent, /观测 12 秒 · 新识别文本 1 条 · 约 5 条\/分钟/)
+  row.append(win.document.createElement('span'))
+  await delay(60)
+  assert.match(detail.textContent, /新识别文本 1 条/)
+  navigate(win, '/2002')
+  assert.match(detail.textContent, /观测 0 秒 · 新识别文本 0 条/)
+  toggle.click()
+  assert.equal(detail.hidden, true)
   stop()
 })
