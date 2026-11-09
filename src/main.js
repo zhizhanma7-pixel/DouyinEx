@@ -6,6 +6,7 @@ if (!Reflect.get(window, runtimeKey)) {
   startApp(window, {
     getValue: GM_getValue,
     setValue: GM_setValue,
+    deleteValue: GM_deleteValue,
     registerMenuCommand: GM_registerMenuCommand,
     unregisterMenuCommand: GM_unregisterMenuCommand,
   }, features)

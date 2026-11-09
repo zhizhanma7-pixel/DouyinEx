@@ -87,6 +87,12 @@ export function startApp(win, api, features) {
         return savePreferences(next) ? '已导入并应用设置。' : '无法保存设置，请重试。'
       },
       resetPreferences: () => savePreferences(settings.defaults),
+      clearRoomPreferences() {
+        if (!settings.clearRoomPreferences()) return false
+        roomPreferences = settings.roomDefaults
+        applyPreferences()
+        return true
+      },
       restoreRoomLayout() {
         update()
         return saveRoomPreferences(settings.roomDefaults)

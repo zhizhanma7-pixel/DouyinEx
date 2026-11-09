@@ -27,6 +27,7 @@ function fakeScriptApi(values = new Map()) {
   const api = {
     getValue: (key, fallback) => values.has(key) ? values.get(key) : fallback,
     setValue: (key, value) => values.set(key, value),
+    deleteValue: (key) => values.delete(key),
     registerMenuCommand(label, run) {
       commands.set(++nextId, { label, run })
       return nextId
@@ -209,6 +210,7 @@ test('the production userscript has narrow metadata and runs once in a fixture',
   Object.assign(win, {
     GM_getValue: api.getValue,
     GM_setValue: api.setValue,
+    GM_deleteValue: api.deleteValue,
     GM_registerMenuCommand: api.registerMenuCommand,
     GM_unregisterMenuCommand: api.unregisterMenuCommand,
   })
@@ -219,7 +221,7 @@ test('the production userscript has narrow metadata and runs once in a fixture',
   assert.deepEqual(matches.map(([, match]) => match), ['https://live.douyin.com/*'])
   const grants = [...script.text.matchAll(/^\/\/ @grant\s+(\S+)/gm)]
   assert.deepEqual(grants.map(([, grant]) => grant), [
-    'window.onurlchange', 'GM_getValue', 'GM_setValue',
+    'window.onurlchange', 'GM_getValue', 'GM_setValue', 'GM_deleteValue',
     'GM_registerMenuCommand', 'GM_unregisterMenuCommand',
   ])
   assert.match(script.text, /^\/\/ @noframes$/m)
@@ -317,7 +319,8 @@ test('export, import and reset apply only validated feature preferences', (t) =>
       'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
       'picture-in-picture': false, multiview: false,
       capture: false, 'danmaku-export': false,
-      'danmaku-filters': false, 'danmaku-stats': false, 'compact-panel': true, 'video-diagnostics': false,
+      'danmaku-filters': false, 'danmaku-stats': false, 'danmaku-plus-one': false, 'danmaku-tail': false,
+    'compact-panel': true, 'video-diagnostics': false,
     },
   })
 
@@ -452,7 +455,8 @@ test('room preferences survive refresh, are isolated across rooms, and stay out 
     'player-controls': false, 'highest-quality': false, 'volume-wheel': false, 'pause-guard': false,
     'picture-in-picture': false, multiview: false,
     capture: false, 'danmaku-export': false,
-    'danmaku-filters': false, 'danmaku-stats': false, 'compact-panel': true, 'video-diagnostics': false,
+    'danmaku-filters': false, 'danmaku-stats': false, 'danmaku-plus-one': false, 'danmaku-tail': false,
+    'compact-panel': true, 'video-diagnostics': false,
   })
   const restoreButton = [...root.querySelectorAll('button')].find((button) => button.textContent === '恢复原始布局')
   restoreButton.click()
@@ -871,5 +875,154 @@ test('danmaku stats count new observations, estimate rate, and reset on room nav
   assert.match(detail.textContent, /观测 0 秒 · 新识别文本 0 条/)
   toggle.click()
   assert.equal(detail.hidden, true)
+  stop()
+})
+
+const chatRoom = `<div id="chatroom"><div class="webcast-chatroom___list">
+  <div class="webcast-chatroom___item"><span class="webcast-chatroom___nickname">甲：</span>
+  <span class="webcast-chatroom___content-with-emoji-text">主播好<img alt="😊"></span></div>
+  </div><div class="composer"><textarea maxlength="50"></textarea><div><button type="button">发送</button></div></div></div>`
+
+function enter(win, target, init = {}) {
+  target.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }))
+}
+
+test('danmaku tail is added once on Enter or the send button and respects IME, Shift and bypass', (t) => {
+  const win = openRoom(t, chatRoom)
+  const { api } = fakeScriptApi()
+  const stop = startApp(win, api, features)
+  const toggle = control(panelRoot(win), '弹幕小尾巴')
+  toggle.click()
+  const detail = toggle.closest('.row').querySelector('.detail')
+  const editor = win.document.querySelector('#chatroom textarea')
+  const inputs = []
+  editor.addEventListener('input', () => inputs.push(editor.value))
+  editor.value = '没有设置时不变'
+  enter(win, editor)
+  assert.equal(editor.value, '没有设置时不变')
+
+  detail.querySelector('input[type="text"]').value = '【DouyinEx】'
+  detail.querySelector('button').click()
+  assert.match(detail.textContent, /今天主播打得不错【DouyinEx】/)
+  editor.value = '今天主播打得不错'
+  enter(win, editor, { isComposing: true })
+  enter(win, editor, { shiftKey: true })
+  assert.equal(editor.value, '今天主播打得不错')
+  enter(win, editor)
+  enter(win, editor)
+  assert.equal(editor.value, '今天主播打得不错【DouyinEx】')
+  assert.deepEqual(inputs, ['今天主播打得不错【DouyinEx】'])
+
+  editor.value = '   '
+  enter(win, editor)
+  assert.equal(editor.value, '   ')
+  editor.value = '按钮发送'
+  win.document.querySelector('#chatroom button').click()
+  assert.equal(editor.value, '按钮发送【DouyinEx】')
+
+  const select = detail.querySelector('select')
+  select.value = 'prefix'
+  detail.querySelector('button').click()
+  editor.value = '前缀'
+  enter(win, editor)
+  assert.equal(editor.value, '【DouyinEx】前缀')
+
+  detail.querySelector('input[type="checkbox"]').click()
+  editor.value = '暂停时不加'
+  enter(win, editor)
+  assert.equal(editor.value, '暂停时不加')
+  detail.querySelector('input[type="checkbox"]').click()
+
+  editor.value = '长'.repeat(45)
+  enter(win, editor)
+  assert.equal(editor.value, '长'.repeat(45))
+  assert.match(detail.textContent, /超出字数限制/)
+
+  toggle.click()
+  editor.value = '关闭后不变'
+  enter(win, editor)
+  assert.equal(editor.value, '关闭后不变')
+  stop()
+})
+
+test('danmaku +1 drafts the body once, previews the tail, and can restore the old draft', async (t) => {
+  const win = openRoom(t, chatRoom)
+  const { api } = fakeScriptApi(new Map([
+    ['featureOptions:danmaku-tail', JSON.stringify({ mode: 'suffix', content: '～' })],
+  ]))
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  control(root, '弹幕小尾巴').click()
+  const toggle = control(root, '弹幕 +1')
+  toggle.click()
+  const detail = toggle.closest('.row').querySelector('.detail')
+  const doc = win.document
+  const editor = doc.querySelector('#chatroom textarea')
+  editor.value = '我自己的草稿'
+  const host = doc.querySelector('douyinex-plus-one')
+  assert.equal(host.hidden, true)
+  const body = doc.querySelector('.webcast-chatroom___content-with-emoji-text')
+  body.dispatchEvent(new win.MouseEvent('pointerover', { bubbles: true }))
+  assert.equal(host.hidden, false)
+  const plusOne = host.shadowRoot.querySelector('button')
+  assert.equal(plusOne.title, '主播好😊～')
+  plusOne.click()
+  assert.equal(editor.value, '主播好😊')
+  assert.match(detail.textContent, /已放入输入框.*主播好😊～/)
+  assert.doesNotMatch(editor.value, /甲/)
+
+  enter(win, editor)
+  assert.equal(editor.value, '主播好😊～')
+
+  const restore = [...detail.querySelectorAll('button')].find((button) => button.textContent === '恢复原草稿')
+  assert.equal(restore.hidden, false)
+  restore.click()
+  assert.equal(editor.value, '我自己的草稿')
+
+  body.dispatchEvent(new win.MouseEvent('pointerover', { bubbles: true }))
+  t.mock.method(win.performance, 'now', () => 1e9)
+  plusOne.click()
+  assert.match(detail.textContent, /已经 \+1 过/)
+  assert.equal(editor.value, '我自己的草稿')
+
+  doc.querySelector('.webcast-chatroom___list').append(doc.querySelector('.webcast-chatroom___item').cloneNode(true))
+  await delay(60)
+  doc.body.dispatchEvent(new win.MouseEvent('pointerover', { bubbles: true }))
+  assert.equal(host.hidden, true)
+
+  toggle.click()
+  assert.equal(doc.querySelector('douyinex-plus-one'), null)
+  stop()
+})
+
+test('room preferences keep only recent rooms, drop defaults, and can all be cleared', (t) => {
+  const win = openRoom(t, cleanupFixture)
+  const values = new Map()
+  const { api } = fakeScriptApi(values)
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const roomKeys = () => [...values.keys()].filter((key) => key.startsWith('featurePreferences:room:'))
+  for (let room = 1; room <= 52; room += 1) {
+    navigate(win, `/${room}`)
+    control(root, '深色布局').click()
+  }
+  assert.equal(roomKeys().length, 50)
+  assert.equal(values.has('featurePreferences:room:/1'), false)
+  assert.equal(values.has('featurePreferences:room:/2'), false)
+  assert.equal(values.get('featurePreferences:rooms')[0], '/52')
+
+  navigate(win, '/3')
+  assert.equal(control(root, '深色布局').checked, true)
+  assert.equal(values.get('featurePreferences:rooms')[0], '/3')
+  control(root, '深色布局').click()
+  assert.equal(values.has('featurePreferences:room:/3'), false)
+  assert.equal(values.get('featurePreferences:rooms').includes('/3'), false)
+
+  navigate(win, '/52')
+  const clear = [...root.querySelectorAll('button')].find((button) => button.textContent === '清除所有房间设置')
+  clear.click()
+  assert.deepEqual(roomKeys(), [])
+  assert.equal(values.has('featurePreferences:rooms'), false)
+  assert.equal(control(root, '深色布局').checked, false)
   stop()
 })

@@ -1,6 +1,7 @@
 export type ScriptApi = {
   getValue(key: string, defaultValue: boolean | null): unknown
-  setValue(key: string, value: boolean | string | PreferencesFile): void
+  setValue(key: string, value: boolean | string | string[] | PreferencesFile): void
+  deleteValue(key: string): void
   registerMenuCommand(label: string, callback: () => void): number | string
   unregisterMenuCommand(id: number | string): void
 }
@@ -43,6 +44,7 @@ export type ErrorCode = 'settings-read' | 'settings-write' | 'feature-mount' | '
 declare global {
   const GM_getValue: ScriptApi['getValue']
   const GM_setValue: ScriptApi['setValue']
+  const GM_deleteValue: ScriptApi['deleteValue']
   const GM_registerMenuCommand: ScriptApi['registerMenuCommand']
   const GM_unregisterMenuCommand: ScriptApi['unregisterMenuCommand']
   interface Window {

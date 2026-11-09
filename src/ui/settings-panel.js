@@ -25,6 +25,7 @@ const availabilityLabels = {
  *   importPreferences(text: string): string
  *   resetPreferences(): boolean
  *   restoreRoomLayout(): boolean
+ *   clearRoomPreferences(): boolean
  * }} actions
  */
 export function createSettingsPanel(document, features, actions) {
@@ -109,6 +110,11 @@ export function createSettingsPanel(document, features, actions) {
       }
       preferences.value = ''
       feedback.textContent = '已恢复默认设置。'
+    }),
+    button('清除所有房间设置', () => {
+      feedback.textContent = actions.clearRoomPreferences()
+        ? '已清除所有直播间的页面清理设置。'
+        : '无法清除房间设置，请重试。'
     }),
   )
   transfer.append(element('summary', '导入、导出与恢复'), inputLabel, preferences, transferActions)

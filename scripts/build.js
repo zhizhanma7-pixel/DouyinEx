@@ -20,6 +20,7 @@ export async function buildUserscript({ dev = false, write = true } = {}) {
     '// @grant        window.onurlchange',
     '// @grant        GM_getValue',
     '// @grant        GM_setValue',
+    '// @grant        GM_deleteValue',
     '// @grant        GM_registerMenuCommand',
     '// @grant        GM_unregisterMenuCommand',
     '// ==/UserScript==',
