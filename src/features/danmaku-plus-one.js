@@ -1,13 +1,12 @@
 import { chatLimit, findChatEditor, readDraft, textLength, writeDraft } from '../adapters/douyin/chat-input.js'
-import { watchDanmaku } from '../adapters/douyin/danmaku.js'
+import { readDanmakuRow, watchDanmaku } from '../adapters/douyin/danmaku.js'
 import { actionButton } from '../ui/dom.js'
 import { previewTail } from './danmaku-tail.js'
 
 const clickCooldown = 800
-const hoverDepth = 8
 const floatingStyles = `
   :host { all: initial; position: fixed; z-index: 10001; }
-  [hidden] { display: none !important; }
+  :host([hidden]) { display: none !important; }
   button {
     min-inline-size: 34px; min-block-size: 24px; padding: 0 8px;
     border: 1px solid #47625e; border-radius: 999px;
@@ -33,19 +32,26 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
 
   const host = document.createElement('douyinex-plus-one')
   const root = host.attachShadow({ mode: 'open' })
-  const style = document.createElement('style')
-  style.textContent = floatingStyles
+  if ('adoptedStyleSheets' in root && typeof win.CSSStyleSheet.prototype.replaceSync === 'function') {
+    const sheet = new win.CSSStyleSheet()
+    sheet.replaceSync(floatingStyles)
+    root.adoptedStyleSheets = [sheet]
+  } else {
+    const style = document.createElement('style')
+    style.textContent = floatingStyles
+    root.append(style)
+  }
   const plusOne = document.createElement('button')
   plusOne.type = 'button'
   plusOne.textContent = '+1'
   plusOne.setAttribute('aria-label', '+1：放入输入框')
-  root.append(style, plusOne)
+  root.append(plusOne)
   host.hidden = true
   document.body.append(host)
 
   const status = document.createElement('p')
   status.setAttribute('role', 'status')
-  status.textContent = '把鼠标移到一条弹幕上，点击 +1 放入输入框。不会自动发送。'
+  const guide = document.createElement('p')
   const restore = actionButton(document, '恢复原草稿', () => {
     const editor = findChatEditor(document)
     if (!editor || !writeDraft(editor, previousDraft)) {
@@ -60,12 +66,16 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
   const actions = document.createElement('div')
   actions.className = 'actions'
   actions.append(restore)
-  view.detail.append(status, actions)
+  view.detail.append(guide, status, actions)
   view.detail.hidden = false
 
-  watchDanmaku(document, route.key.slice(1), signal, ({ entries }) => {
+  watchDanmaku(document, route.key.slice(1), signal, ({ available, entries }) => {
     rows = new Map(entries.map(({ node, message }) => [node, message]))
     if (hovered && rows.get(hovered.node)?.id !== hovered.id) hide()
+    else position()
+    const hint = entries.length ? '把鼠标移到普通文字弹幕上，点击 +1 放入输入框。'
+      : available ? '当前还没有识别到可 +1 的文字弹幕。' : '当前房间没有可用的弹幕列表。'
+    if (guide.textContent !== hint) guide.textContent = hint
   })
 
   function hide() {
@@ -76,17 +86,27 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
   /** @param {Element} node @param {import('../adapters/douyin/danmaku.js').Danmaku} message */
   function show(node, message) {
     hovered = { node, id: message.id }
-    const rect = node.getBoundingClientRect()
-    host.style.top = `${Math.max(0, rect.top + (rect.height - 24) / 2)}px`
-    host.style.left = `${Math.max(0, rect.right - 44)}px`
     plusOne.title = previewTail(document, message.text)
+    position()
+  }
+
+  function position() {
+    if (!hovered) return
+    const rect = hovered.node.getBoundingClientRect()
+    const clip = hovered.node.closest('.webcast-chatroom___list')?.getBoundingClientRect()
+    if (clip?.height && (rect.bottom <= clip.top || rect.top >= clip.bottom)) {
+      hide()
+      return
+    }
+    host.style.top = `${Math.max(0, rect.top + (rect.height - 24) / 2)}px`
+    host.style.left = `${Math.max(0, Math.min(rect.right - 44, browser.innerWidth - 44))}px`
     host.hidden = false
   }
 
   document.addEventListener('pointerover', ({ target }) => {
     if (target === host) return
     let node = target instanceof browser.Element ? target : null
-    for (let depth = 0; node && depth < hoverDepth; depth += 1, node = node.parentElement) {
+    for (; node; node = node.parentElement) {
       const message = rows.get(node)
       if (message) {
         if (hovered?.node !== node || hovered.id !== message.id) show(node, message)
@@ -95,7 +115,7 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
     }
     hide()
   }, { capture: true, signal })
-  document.addEventListener('scroll', hide, { capture: true, passive: true, signal })
+  document.addEventListener('scroll', position, { capture: true, passive: true, signal })
 
   plusOne.addEventListener('click', () => {
     const now = browser.performance.now()
@@ -103,7 +123,9 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
     lastClick = now
     const target = hovered
     const message = target && rows.get(target.node)
-    if (!target || !message || message.id !== target.id || !target.node.isConnected) {
+    const current = target?.node.isConnected ? readDanmakuRow(target.node) : null
+    if (!target || !message || message.id !== target.id ||
+      !current || current.author !== message.author || current.text !== message.text) {
       status.textContent = '这条弹幕已刷新，请重新选择。'
       hide()
       return

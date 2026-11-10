@@ -4,6 +4,7 @@ const listSelector = '#chatroom .webcast-chatroom___list'
 const rowSelector = '.webcast-chatroom___item'
 const authorSelector = '.webcast-chatroom___nickname'
 const bodySelector = '.webcast-chatroom___content-with-emoji-text'
+const bodyPartSelector = `${bodySelector},.webcast-chatroom___content-with-emoji-emoji`
 const omitted = '[hidden],[aria-hidden="true"],script,style,button,input,textarea,select,[contenteditable],svg'
 const editors = 'form,input,textarea,select,[contenteditable]'
 const maxRows = 180
@@ -30,10 +31,20 @@ function readText(node) {
 }
 
 /** @param {Element} row */
-function readRow(row) {
+export function readDanmakuRow(row) {
   if (row.closest('[hidden],[aria-hidden="true"]') || row.querySelector(editors)) return null
-  const authorNode = row.querySelector(authorSelector)
-  const bodyNode = row.querySelector(bodySelector)
+  if (row.querySelector('.webcast-chatroom__room-message')) return null
+
+  const part = row.querySelector(bodyPartSelector)
+  const container = part?.parentElement
+  const nickname = container?.previousElementSibling
+  // The current layout puts nickname and message in adjacent spans inside the row wrapper.
+  const inline = container?.matches('span') && nickname?.matches('span') &&
+    container.parentElement?.parentElement?.matches('.webcast-chatroom___item-wrapper') &&
+    /[：:]$/.test(readText(nickname).trim()) &&
+    Array.from(container.children).every((child) => child.matches(bodyPartSelector))
+  const authorNode = inline ? nickname : row.querySelector(authorSelector)
+  const bodyNode = inline ? container : row.querySelector(bodySelector)
   if (!authorNode || !bodyNode || bodyNode.contains(authorNode) || authorNode.contains(bodyNode)) return null
   const author = readText(authorNode).trim().replace(/[：:]$/, '').trim().slice(0, 100)
   const text = readText(bodyNode).replace(/\s+/g, ' ').trim().slice(0, 500)
@@ -88,7 +99,7 @@ function createWatcher(document, roomId, onStop) {
     const entries = []
     for (let index = Math.max(0, rows.length - maxRows); index < rows.length; index += 1) {
       const node = rows[index]
-      const content = readRow(node)
+      const content = readDanmakuRow(node)
       if (!content) {
         observed.delete(node)
         continue

@@ -995,6 +995,52 @@ test('danmaku +1 drafts the body once, previews the tail, and can restore the ol
   stop()
 })
 
+test('danmaku +1 recognizes the current inline nickname and complete emoji message', async (t) => {
+  const win = openRoom(t, `<div id="chatroom">
+    <div class="webcast-chatroom___list">
+      <div class="webcast-chatroom___item"><div class="webcast-chatroom___item-wrapper"><div>
+        <span><span><img alt="粉丝牌"></span></span><span>测试昵称 ：</span><span>
+          <span class="webcast-chatroom___content-with-emoji-text">前文</span><span class="webcast-chatroom___content-with-emoji-emoji"><img alt="[捂脸]"></span><span class="webcast-chatroom___content-with-emoji-text">后文</span></span>
+      </div></div></div>
+      <div class="webcast-chatroom___item"><div class="webcast-chatroom___item-wrapper"><div class="webcast-chatroom__room-message">
+        <span class="webcast-chatroom___nickname">测试用户</span><span class="webcast-chatroom___content-with-emoji-text">赠礼通知</span>
+      </div></div></div>
+    </div>
+    <div id="chatInput"><div contenteditable="true" data-slate-editor="true">原草稿</div><button>发送</button></div>
+  </div>`)
+  const { api } = fakeScriptApi()
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const toggle = control(root, '弹幕 +1')
+  toggle.click()
+  const doc = win.document
+  const host = doc.querySelector('douyinex-plus-one')
+  const button = host.shadowRoot.querySelector('button')
+  const editor = doc.querySelector('[data-slate-editor]')
+  const sent = t.mock.fn()
+  doc.querySelector('#chatInput button').addEventListener('click', sent)
+  const hover = (node) => node.dispatchEvent(new win.MouseEvent('pointerover', { bubbles: true }))
+  hover(doc.querySelector('.webcast-chatroom__room-message'))
+  assert.equal(host.hidden, true)
+  const body = doc.querySelector('.webcast-chatroom___content-with-emoji-text')
+  hover(body)
+  assert.equal(host.hidden, false)
+  assert.equal(button.title, '前文[捂脸]后文')
+
+  body.textContent = '更新的正文'
+  button.click()
+  assert.equal(editor.textContent, '原草稿')
+  assert.equal(host.hidden, true)
+  await delay(60)
+  t.mock.method(win.performance, 'now', () => 1e9)
+  hover(body)
+  assert.equal(button.title, '更新的正文[捂脸]后文')
+  button.click()
+  assert.equal(editor.textContent, '更新的正文[捂脸]后文')
+  assert.equal(sent.mock.callCount(), 0)
+  stop()
+})
+
 test('room preferences keep only recent rooms, drop defaults, and can all be cleared', (t) => {
   const win = openRoom(t, cleanupFixture)
   const values = new Map()
