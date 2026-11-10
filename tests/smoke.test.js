@@ -995,6 +995,94 @@ test('danmaku +1 drafts the body once, previews the tail, and can restore the ol
   stop()
 })
 
+test('danmaku +1 recognizes the current inline nickname and complete emoji message', async (t) => {
+  const win = openRoom(t, `<div id="chatroom">
+    <div class="webcast-chatroom___list">
+      <div class="webcast-chatroom___item"><div class="webcast-chatroom___item-wrapper"><div>
+        <span><span><img alt="粉丝牌"></span></span><span>测试昵称 ：</span><span>
+          <span class="webcast-chatroom___content-with-emoji-text">前文</span><span class="webcast-chatroom___content-with-emoji-emoji"><img alt="[捂脸]"></span><span class="webcast-chatroom___content-with-emoji-text">后文</span></span>
+      </div></div></div>
+      <div class="webcast-chatroom___item"><div class="webcast-chatroom___item-wrapper"><div class="webcast-chatroom__room-message">
+        <span class="webcast-chatroom___nickname">测试用户</span><span class="webcast-chatroom___content-with-emoji-text">赠礼通知</span>
+      </div></div></div>
+    </div>
+    <div id="chatInput"><div contenteditable="true" data-slate-editor="true">原草稿</div><button>发送</button></div>
+  </div>`)
+  const { api } = fakeScriptApi()
+  const stop = startApp(win, api, features)
+  const root = panelRoot(win)
+  const toggle = control(root, '弹幕 +1')
+  toggle.click()
+  const doc = win.document
+  const host = doc.querySelector('douyinex-plus-one')
+  const button = host.shadowRoot.querySelector('button')
+  const editor = doc.querySelector('[data-slate-editor]')
+  const sent = t.mock.fn()
+  doc.querySelector('#chatInput button').addEventListener('click', sent)
+  const hover = (node) => node.dispatchEvent(new win.MouseEvent('pointerover', { bubbles: true }))
+  hover(doc.querySelector('.webcast-chatroom__room-message'))
+  assert.equal(host.hidden, true)
+  const body = doc.querySelector('.webcast-chatroom___content-with-emoji-text')
+  hover(body)
+  assert.equal(host.hidden, false)
+  assert.equal(button.title, '前文[捂脸]后文')
+
+  body.textContent = '更新的正文'
+  button.click()
+  assert.equal(editor.textContent, '原草稿')
+  assert.equal(host.hidden, true)
+  await delay(60)
+  t.mock.method(win.performance, 'now', () => 1e9)
+  hover(body)
+  assert.equal(button.title, '更新的正文[捂脸]后文')
+  button.click()
+  assert.equal(editor.textContent, '更新的正文[捂脸]后文')
+  assert.equal(sent.mock.callCount(), 0)
+  stop()
+})
+
+test('screen danmaku rolls only new chat and shares the +1 draft action', async (t) => {
+  const win = openRoom(t, `<div class="douyin-player">
+    <video></video><div id="DanmakuLayout"><div class="CanvasDanmakuPlugin"><canvas></canvas></div></div>
+  </div><div id="chatroom">
+    <div class="webcast-chatroom___list"><div class="webcast-chatroom___item">
+      <span class="webcast-chatroom___nickname">测试昵称</span>
+      <span class="webcast-chatroom___content-with-emoji-text">开启前的弹幕</span>
+    </div></div>
+    <textarea>原草稿</textarea><button>发送</button>
+  </div>`)
+  const { api } = fakeScriptApi()
+  const stop = startApp(win, api, features)
+  const doc = win.document
+  const toggle = control(panelRoot(win), '弹幕 +1')
+  const canvas = doc.querySelector('canvas')
+  toggle.click()
+  assert.equal(canvas.nextElementSibling, null)
+
+  const row = doc.querySelector('.webcast-chatroom___item').cloneNode(true)
+  row.lastElementChild.textContent = '正在滚动的弹幕'
+  doc.querySelector('.webcast-chatroom___list').append(row)
+  await delay(60)
+  const host = canvas.nextElementSibling
+  assert.equal(host.localName, 'douyinex-screen-danmaku')
+  const items = host.shadowRoot.querySelectorAll('.item')
+  assert.equal(items.length, 1)
+  assert.equal(items[0].firstChild.textContent, '正在滚动的弹幕')
+
+  // A scrolling item keeps the text it was created with, even after chat row recycling.
+  row.lastElementChild.textContent = '复用后的弹幕'
+  const sent = t.mock.fn()
+  doc.querySelector('#chatroom button').addEventListener('click', sent)
+  items[0].querySelector('button').click()
+  assert.equal(doc.querySelector('textarea').value, '正在滚动的弹幕')
+  assert.equal(sent.mock.callCount(), 0)
+  toggle.click()
+  assert.equal(canvas.nextElementSibling, null)
+  assert.equal(host.shadowRoot.querySelector('.item'), null)
+  assert.equal(doc.querySelector('video').isConnected, true)
+  stop()
+})
+
 test('room preferences keep only recent rooms, drop defaults, and can all be cleared', (t) => {
   const win = openRoom(t, cleanupFixture)
   const values = new Map()
