@@ -1,7 +1,6 @@
-// The logged-in chat composer has not been inspected in a real room yet. Every
-// assumption about it lives here so a page change only needs this file updated.
 const scopeSelector = '#chatroom'
 const editorSelector = 'textarea, [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]'
+const nativeSendSelector = '.webcast-chatroom___send-btn'
 const sendLabels = new Set(['发送', '发 送', 'Send'])
 // Assumed Douyin web chat limit; an explicit maxlength on the editor wins.
 const fallbackLimit = 50
@@ -32,14 +31,28 @@ export function findChatEditor(document) {
 
 /** @param {Editor} editor @returns {Element | null} */
 export function findSendButton(editor) {
+  const composer = editor.closest('#chatInput')
+  const nativeSend = composer?.querySelector(nativeSendSelector)
+  if (nativeSend) return nativeSend
   let container = editor.parentElement
   for (let depth = 0; container && depth < 5; depth += 1, container = container.parentElement) {
     for (const candidate of container.querySelectorAll('button,[role="button"]')) {
-      if (sendLabels.has((candidate.textContent ?? '').trim())) return candidate
+      if (sendLabels.has((candidate.getAttribute('aria-label') ?? candidate.textContent ?? '').trim())) return candidate
     }
-    if (container.id === 'chatroom') break
+    if (container === composer || container.id === 'chatroom') break
   }
   return null
+}
+
+/** @param {Editor} editor */
+export function clickChatSend(editor) {
+  const button = findSendButton(editor)
+  const win = editor.ownerDocument.defaultView
+  if (!win || !button?.isConnected || button.closest('[hidden],[aria-hidden="true"],[inert]') ||
+    button.matches(':disabled,[disabled],[aria-disabled="true"],.webcast-chatroom___send-btn.disable')) return false
+  if (button instanceof win.HTMLElement) button.click()
+  else button.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, composed: true }))
+  return true
 }
 
 /** @param {Editor} editor */
@@ -56,7 +69,35 @@ export function textLength(text) {
 /** @param {Editor} editor */
 export function readDraft(editor) {
   if (editor.localName === 'textarea') return /** @type {HTMLTextAreaElement} */ (editor).value
-  return editor.textContent ?? ''
+  const text = editor.textContent ?? ''
+  return text === '\u200B' && editor.querySelector('[data-enter="true"],[data-slate-zero-width]') ? '' : text
+}
+
+/** @param {Editor} editor */
+function selectDraft(editor) {
+  editor.focus()
+  const selection = editor.ownerDocument.getSelection()
+  if (!selection) return
+  const range = editor.ownerDocument.createRange()
+  range.selectNodeContents(editor)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
+
+/** Stage a send through the rich editor's paste handler when available. @param {Editor} editor @param {string} text */
+export function stageChatMessage(editor, text) {
+  if (readDraft(editor) === text) return true
+  const win = editor.ownerDocument.defaultView
+  if (editor.matches('[data-slate-editor="true"]') && win?.DataTransfer && win.ClipboardEvent) {
+    selectDraft(editor)
+    const clipboardData = new win.DataTransfer()
+    clipboardData.setData('text/plain', text)
+    const handled = !editor.dispatchEvent(new win.ClipboardEvent('paste', {
+      clipboardData, bubbles: true, cancelable: true, composed: true,
+    }))
+    if (handled || readDraft(editor) === text) return true
+  }
+  return writeDraft(editor, text)
 }
 
 /**
@@ -77,14 +118,7 @@ export function writeDraft(editor, text) {
       setter.call(editor, text)
       notify()
     } else {
-      editor.focus()
-      const selection = win.getSelection()
-      if (selection) {
-        const range = document.createRange()
-        range.selectNodeContents(editor)
-        selection.removeAllRanges()
-        selection.addRange(range)
-      }
+      selectDraft(editor)
       // Rich editors only stay in sync with edits that go through the browser.
       const inserted = typeof document.execCommand === 'function' && document.execCommand('insertText', false, text)
       if (!inserted || readDraft(editor) !== text) {

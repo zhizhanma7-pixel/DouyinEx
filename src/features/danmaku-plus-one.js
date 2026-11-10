@@ -1,4 +1,4 @@
-import { chatLimit, findChatEditor, readDraft, textLength, writeDraft } from '../adapters/douyin/chat-input.js'
+import { chatLimit, clickChatSend, findChatEditor, findSendButton, readDraft, stageChatMessage, textLength, writeDraft } from '../adapters/douyin/chat-input.js'
 import { readDanmakuRow, watchDanmaku } from '../adapters/douyin/danmaku.js'
 import { actionButton } from '../ui/dom.js'
 import { previewTail } from './danmaku-tail.js'
@@ -30,6 +30,8 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
   const used = new Set()
   let lastClick = -Infinity
   let previousDraft = ''
+  /** @type {number | undefined} */
+  let sendTimer
 
   const host = document.createElement('douyinex-plus-one')
   const root = host.attachShadow({ mode: 'open' })
@@ -45,7 +47,7 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
   const plusOne = document.createElement('button')
   plusOne.type = 'button'
   plusOne.textContent = '+1'
-  plusOne.setAttribute('aria-label', '+1：放入输入框')
+  plusOne.setAttribute('aria-label', '+1：发送弹幕')
   root.append(plusOne)
   host.hidden = true
   document.body.append(host)
@@ -70,14 +72,14 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
   view.detail.append(guide, status, actions)
   view.detail.hidden = false
 
-  const screenDanmaku = createScreenDanmaku(document, fillDraft)
+  const screenDanmaku = createScreenDanmaku(document, sendDanmaku)
   watchDanmaku(document, route.key.slice(1), signal, (snapshot) => {
     const { available, entries } = snapshot
     screenDanmaku?.update(snapshot)
     rows = new Map(entries.map(({ node, message }) => [node, message]))
     if (hovered && rows.get(hovered.node)?.id !== hovered.id) hide()
     else position()
-    const hint = entries.length ? '在直播画面里悬停新弹幕，点击 +1 放入输入框。'
+    const hint = entries.length ? '在直播画面里悬停新弹幕，点击 +1 直接发送。'
       : available ? '当前还没有识别到可 +1 的文字弹幕。' : '当前房间没有可用的弹幕列表。'
     if (guide.textContent !== hint) guide.textContent = hint
   })
@@ -131,45 +133,54 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
       hide()
       return
     }
-    fillDraft(message)
+    sendDanmaku(message)
   }, { signal })
 
   /** @param {import('../adapters/douyin/danmaku.js').Danmaku} message */
-  function fillDraft(message) {
+  function sendDanmaku(message) {
     const now = browser.performance.now()
-    if (now - lastClick < clickCooldown) return
+    if (sendTimer !== undefined || now - lastClick < clickCooldown) return
     lastClick = now
     if (used.has(message.id)) {
       status.textContent = '这条弹幕已经 +1 过了。'
       return
     }
     const editor = findChatEditor(document)
-    if (!editor) {
-      status.textContent = '未找到聊天输入框，可能未登录或房间禁止发言。'
+    if (!editor || !findSendButton(editor)) {
+      status.textContent = '未找到抖音发送控件，可能未登录或房间禁止发言。'
       return
     }
     const finalText = previewTail(document, message.text)
     if (textLength(finalText) > chatLimit(editor)) {
-      status.textContent = `超出 ${chatLimit(editor)} 字限制，未放入输入框。`
+      status.textContent = `超出 ${chatLimit(editor)} 字限制，本条未发送。`
       return
     }
     const draft = readDraft(editor)
-    if (!writeDraft(editor, message.text)) {
-      status.textContent = `无法写入输入框，请手动复制：${message.text}`
-      return
-    }
-    used.add(message.id)
-    if (draft.trim() && draft !== message.text) {
+    if (draft.trim() && draft !== finalText) {
       previousDraft = draft
       restore.hidden = false
     }
-    editor.focus()
-    hide()
-    status.textContent = `已放入输入框，按 Enter 或发送按钮发送：${finalText}`
+    if (!stageChatMessage(editor, finalText)) {
+      status.textContent = '无法写入抖音输入框，本条未发送。'
+      return
+    }
+    // A controlled editor can enable or replace the send control after rendering.
+    sendTimer = browser.setTimeout(() => {
+      sendTimer = undefined
+      if (signal.aborted || findChatEditor(document) !== editor) return
+      if (readDraft(editor) !== finalText || !clickChatSend(editor)) {
+        status.textContent = '抖音输入框内容已变更或发送按钮不可用，本条未发送。'
+        return
+      }
+      used.add(message.id)
+      hide()
+      status.textContent = `已请求抖音发送：${finalText}`
+    }, 0)
   }
 
   return {
     dispose() {
+      browser.clearTimeout(sendTimer)
       screenDanmaku?.dispose()
       host.remove()
       rows.clear()
