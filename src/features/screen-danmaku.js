@@ -111,7 +111,7 @@ export function createScreenDanmaku(document, onPlusOne) {
         const button = document.createElement('button')
         button.type = 'button'
         button.textContent = '+1'
-        button.setAttribute('aria-label', '+1：放入输入框')
+        button.setAttribute('aria-label', '+1：发送弹幕')
         item.append(button)
         item.addEventListener('pointerenter', () => {
           const rect = item.getBoundingClientRect()

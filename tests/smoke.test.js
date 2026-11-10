@@ -945,7 +945,7 @@ test('danmaku tail is added once on Enter or the send button and respects IME, S
   stop()
 })
 
-test('danmaku +1 drafts the body once, previews the tail, and can restore the old draft', async (t) => {
+test('danmaku +1 sends once with the tail and can restore the old draft', async (t) => {
   const win = openRoom(t, chatRoom)
   const { api } = fakeScriptApi(new Map([
     ['featureOptions:danmaku-tail', JSON.stringify({ mode: 'suffix', content: '～' })],
@@ -959,6 +959,12 @@ test('danmaku +1 drafts the body once, previews the tail, and can restore the ol
   const doc = win.document
   const editor = doc.querySelector('#chatroom textarea')
   editor.value = '我自己的草稿'
+  const sent = t.mock.fn(() => {
+    const text = editor.value
+    editor.value = ''
+    return text
+  })
+  doc.querySelector('#chatroom button').addEventListener('click', sent)
   const host = doc.querySelector('douyinex-plus-one')
   assert.equal(host.hidden, true)
   const body = doc.querySelector('.webcast-chatroom___content-with-emoji-text')
@@ -967,12 +973,11 @@ test('danmaku +1 drafts the body once, previews the tail, and can restore the ol
   const plusOne = host.shadowRoot.querySelector('button')
   assert.equal(plusOne.title, '主播好😊～')
   plusOne.click()
-  assert.equal(editor.value, '主播好😊')
-  assert.match(detail.textContent, /已放入输入框.*主播好😊～/)
-  assert.doesNotMatch(editor.value, /甲/)
-
-  enter(win, editor)
-  assert.equal(editor.value, '主播好😊～')
+  plusOne.click()
+  await delay(10)
+  assert.equal(sent.mock.callCount(), 1)
+  assert.equal(sent.mock.calls[0].result, '主播好😊～')
+  assert.match(detail.textContent, /已请求抖音发送.*主播好😊～/)
 
   const restore = [...detail.querySelectorAll('button')].find((button) => button.textContent === '恢复原草稿')
   assert.equal(restore.hidden, false)
@@ -984,6 +989,7 @@ test('danmaku +1 drafts the body once, previews the tail, and can restore the ol
   plusOne.click()
   assert.match(detail.textContent, /已经 \+1 过/)
   assert.equal(editor.value, '我自己的草稿')
+  assert.equal(sent.mock.callCount(), 1)
 
   doc.querySelector('.webcast-chatroom___list').append(doc.querySelector('.webcast-chatroom___item').cloneNode(true))
   await delay(60)
@@ -1006,7 +1012,10 @@ test('danmaku +1 recognizes the current inline nickname and complete emoji messa
         <span class="webcast-chatroom___nickname">测试用户</span><span class="webcast-chatroom___content-with-emoji-text">赠礼通知</span>
       </div></div></div>
     </div>
-    <div id="chatInput"><div contenteditable="true" data-slate-editor="true">原草稿</div><button>发送</button></div>
+    <div id="chatInput">
+      <div data-e2e="live-chatting"><div contenteditable="true" data-slate-editor="true"><div class="ace-line">原草稿</div></div></div>
+      <svg class="webcast-chatroom___send-btn disable" disabled=""></svg>
+    </div>
   </div>`)
   const { api } = fakeScriptApi()
   const stop = startApp(win, api, features)
@@ -1017,8 +1026,27 @@ test('danmaku +1 recognizes the current inline nickname and complete emoji messa
   const host = doc.querySelector('douyinex-plus-one')
   const button = host.shadowRoot.querySelector('button')
   const editor = doc.querySelector('[data-slate-editor]')
-  const sent = t.mock.fn()
-  doc.querySelector('#chatInput button').addEventListener('click', sent)
+  const nativeSend = doc.querySelector('.webcast-chatroom___send-btn')
+  const sent = t.mock.fn(() => editor.textContent)
+  nativeSend.addEventListener('click', sent)
+  win.DataTransfer = class {
+    setData(_format, value) { this.value = value }
+    getData() { return this.value }
+  }
+  win.ClipboardEvent = class extends win.Event {
+    constructor(type, options) {
+      super(type, options)
+      this.clipboardData = options.clipboardData
+    }
+  }
+  editor.addEventListener('paste', (event) => {
+    event.preventDefault()
+    win.setTimeout(() => {
+      editor.firstElementChild.textContent = event.clipboardData.getData('text/plain')
+      nativeSend.removeAttribute('disabled')
+      nativeSend.classList.remove('disable')
+    }, 0)
+  })
   const hover = (node) => node.dispatchEvent(new win.MouseEvent('pointerover', { bubbles: true }))
   hover(doc.querySelector('.webcast-chatroom__room-message'))
   assert.equal(host.hidden, true)
@@ -1030,18 +1058,20 @@ test('danmaku +1 recognizes the current inline nickname and complete emoji messa
   body.textContent = '更新的正文'
   button.click()
   assert.equal(editor.textContent, '原草稿')
+  assert.equal(sent.mock.callCount(), 0)
   assert.equal(host.hidden, true)
   await delay(60)
   t.mock.method(win.performance, 'now', () => 1e9)
   hover(body)
   assert.equal(button.title, '更新的正文[捂脸]后文')
   button.click()
-  assert.equal(editor.textContent, '更新的正文[捂脸]后文')
-  assert.equal(sent.mock.callCount(), 0)
+  await delay(10)
+  assert.equal(sent.mock.callCount(), 1)
+  assert.equal(sent.mock.calls[0].result, '更新的正文[捂脸]后文')
   stop()
 })
 
-test('screen danmaku rolls only new chat and shares the +1 draft action', async (t) => {
+test('screen danmaku sends new chat through +1 and skips an unavailable send button', async (t) => {
   const win = openRoom(t, `<div class="douyin-player">
     <video></video><div id="DanmakuLayout"><div class="CanvasDanmakuPlugin"><canvas></canvas></div></div>
   </div><div id="chatroom">
@@ -1071,11 +1101,20 @@ test('screen danmaku rolls only new chat and shares the +1 draft action', async 
 
   // A scrolling item keeps the text it was created with, even after chat row recycling.
   row.lastElementChild.textContent = '复用后的弹幕'
-  const sent = t.mock.fn()
-  doc.querySelector('#chatroom button').addEventListener('click', sent)
-  items[0].querySelector('button').click()
-  assert.equal(doc.querySelector('textarea').value, '正在滚动的弹幕')
+  const nativeSend = doc.querySelector('#chatroom button')
+  const sent = t.mock.fn(() => doc.querySelector('textarea').value)
+  nativeSend.addEventListener('click', sent)
+  const plusOne = items[0].querySelector('button')
+  nativeSend.disabled = true
+  plusOne.click()
+  await delay(10)
   assert.equal(sent.mock.callCount(), 0)
+  t.mock.method(win.performance, 'now', () => 1e9)
+  nativeSend.disabled = false
+  plusOne.click()
+  await delay(10)
+  assert.equal(sent.mock.callCount(), 1)
+  assert.equal(sent.mock.calls[0].result, '正在滚动的弹幕')
   toggle.click()
   assert.equal(canvas.nextElementSibling, null)
   assert.equal(host.shadowRoot.querySelector('.item'), null)
