@@ -1041,6 +1041,48 @@ test('danmaku +1 recognizes the current inline nickname and complete emoji messa
   stop()
 })
 
+test('screen danmaku rolls only new chat and shares the +1 draft action', async (t) => {
+  const win = openRoom(t, `<div class="douyin-player">
+    <video></video><div id="DanmakuLayout"><div class="CanvasDanmakuPlugin"><canvas></canvas></div></div>
+  </div><div id="chatroom">
+    <div class="webcast-chatroom___list"><div class="webcast-chatroom___item">
+      <span class="webcast-chatroom___nickname">测试昵称</span>
+      <span class="webcast-chatroom___content-with-emoji-text">开启前的弹幕</span>
+    </div></div>
+    <textarea>原草稿</textarea><button>发送</button>
+  </div>`)
+  const { api } = fakeScriptApi()
+  const stop = startApp(win, api, features)
+  const doc = win.document
+  const toggle = control(panelRoot(win), '弹幕 +1')
+  const canvas = doc.querySelector('canvas')
+  toggle.click()
+  assert.equal(canvas.nextElementSibling, null)
+
+  const row = doc.querySelector('.webcast-chatroom___item').cloneNode(true)
+  row.lastElementChild.textContent = '正在滚动的弹幕'
+  doc.querySelector('.webcast-chatroom___list').append(row)
+  await delay(60)
+  const host = canvas.nextElementSibling
+  assert.equal(host.localName, 'douyinex-screen-danmaku')
+  const items = host.shadowRoot.querySelectorAll('.item')
+  assert.equal(items.length, 1)
+  assert.equal(items[0].firstChild.textContent, '正在滚动的弹幕')
+
+  // A scrolling item keeps the text it was created with, even after chat row recycling.
+  row.lastElementChild.textContent = '复用后的弹幕'
+  const sent = t.mock.fn()
+  doc.querySelector('#chatroom button').addEventListener('click', sent)
+  items[0].querySelector('button').click()
+  assert.equal(doc.querySelector('textarea').value, '正在滚动的弹幕')
+  assert.equal(sent.mock.callCount(), 0)
+  toggle.click()
+  assert.equal(canvas.nextElementSibling, null)
+  assert.equal(host.shadowRoot.querySelector('.item'), null)
+  assert.equal(doc.querySelector('video').isConnected, true)
+  stop()
+})
+
 test('room preferences keep only recent rooms, drop defaults, and can all be cleared', (t) => {
   const win = openRoom(t, cleanupFixture)
   const values = new Map()

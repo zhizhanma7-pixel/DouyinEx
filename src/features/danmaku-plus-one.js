@@ -2,6 +2,7 @@ import { chatLimit, findChatEditor, readDraft, textLength, writeDraft } from '..
 import { readDanmakuRow, watchDanmaku } from '../adapters/douyin/danmaku.js'
 import { actionButton } from '../ui/dom.js'
 import { previewTail } from './danmaku-tail.js'
+import { createScreenDanmaku } from './screen-danmaku.js'
 
 const clickCooldown = 800
 const floatingStyles = `
@@ -69,11 +70,14 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
   view.detail.append(guide, status, actions)
   view.detail.hidden = false
 
-  watchDanmaku(document, route.key.slice(1), signal, ({ available, entries }) => {
+  const screenDanmaku = createScreenDanmaku(document, fillDraft)
+  watchDanmaku(document, route.key.slice(1), signal, (snapshot) => {
+    const { available, entries } = snapshot
+    screenDanmaku?.update(snapshot)
     rows = new Map(entries.map(({ node, message }) => [node, message]))
     if (hovered && rows.get(hovered.node)?.id !== hovered.id) hide()
     else position()
-    const hint = entries.length ? '把鼠标移到普通文字弹幕上，点击 +1 放入输入框。'
+    const hint = entries.length ? '在直播画面里悬停新弹幕，点击 +1 放入输入框。'
       : available ? '当前还没有识别到可 +1 的文字弹幕。' : '当前房间没有可用的弹幕列表。'
     if (guide.textContent !== hint) guide.textContent = hint
   })
@@ -118,9 +122,6 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
   document.addEventListener('scroll', position, { capture: true, passive: true, signal })
 
   plusOne.addEventListener('click', () => {
-    const now = browser.performance.now()
-    if (now - lastClick < clickCooldown) return
-    lastClick = now
     const target = hovered
     const message = target && rows.get(target.node)
     const current = target?.node.isConnected ? readDanmakuRow(target.node) : null
@@ -130,6 +131,14 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
       hide()
       return
     }
+    fillDraft(message)
+  }, { signal })
+
+  /** @param {import('../adapters/douyin/danmaku.js').Danmaku} message */
+  function fillDraft(message) {
+    const now = browser.performance.now()
+    if (now - lastClick < clickCooldown) return
+    lastClick = now
     if (used.has(message.id)) {
       status.textContent = '这条弹幕已经 +1 过了。'
       return
@@ -157,10 +166,11 @@ export function mountDanmakuPlusOne({ document, route, signal, view }) {
     editor.focus()
     hide()
     status.textContent = `已放入输入框，按 Enter 或发送按钮发送：${finalText}`
-  }, { signal })
+  }
 
   return {
     dispose() {
+      screenDanmaku?.dispose()
       host.remove()
       rows.clear()
       used.clear()
